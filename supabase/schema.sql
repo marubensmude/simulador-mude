@@ -53,6 +53,11 @@ create policy "perfil: admin aprova e edita"
   on public.profiles for update
   using (public.is_admin());
 
+drop policy if exists "perfil: admin exclui" on public.profiles;
+create policy "perfil: admin exclui"
+  on public.profiles for delete
+  using (public.is_admin() and id <> auth.uid());
+
 -- ---------- 2. TAXAS (tabela que alimenta as simulações) ----------
 create table if not exists public.taxas (
   id bigint generated always as identity primary key,
