@@ -97,8 +97,16 @@
     body>*{display:none!important}
     #relatorio{display:block!important}
     .demo-banner{display:none!important}
-    @page{margin:0 0 10mm 0}
+    @page{margin:0 0 16mm 0}
+    .rel-corpo h2{break-after:avoid;page-break-after:avoid}
+    .rel-grid div,.rel-destaque,.rel-cur p,.rel-doc,.rel-obs,.rel-rodape,.rel-tab tr{break-inside:avoid;page-break-inside:avoid}
   }
+  .rel-obs{border:1px solid var(--dourado);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:12px;background:#faf6ec;line-height:1.55}
+  .rel-doc{border:1px solid #e5e1d8;border-radius:8px;padding:12px 16px;margin-bottom:10px}
+  .rel-doc h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#141414;margin-bottom:6px;font-family:Georgia,serif}
+  .rel-doc ul{margin:0;padding-left:18px}
+  .rel-doc li{margin-bottom:4px;line-height:1.5}
+  .rel-meta{color:#cfc9bd;font-size:11.5px;margin-top:8px}
   .rel-capa{background:#141414;color:#fff;padding:26px 36px;display:flex;align-items:center;justify-content:space-between;gap:20px}
   .rel-capa img{height:84px}
   .rel-capa h1{font-size:21px;color:#fff;letter-spacing:.5px;font-family:Georgia,serif}
@@ -182,9 +190,14 @@
     <h2>Nova simulação <span class="gold serif">consultiva</span></h2>
     <div class="sub">Preencha os dados do cliente e do imóvel. A plataforma enquadra automaticamente no programa mais vantajoso e compara todas as instituições.</div>
     <div class="grid g3" style="margin-bottom:14px">
-      <div><label>Nome do cliente</label><input id="fCliente" placeholder="Nome e sobrenome"></div>
+      <div><label>Nome completo do cliente</label><input id="fCliente" placeholder="Nome e sobrenome"></div>
       <div><label>Contato (WhatsApp / e-mail)</label><input id="fContato" placeholder="(67) 9…"></div>
       <div><label>Data de nascimento do proponente mais velho</label><input id="fNasc" type="date"></div>
+    </div>
+    <div class="grid g3" style="margin-bottom:14px">
+      <div><label>CPF</label><input id="fCpf" inputmode="numeric" placeholder="000.000.000-00"></div>
+      <div><label>Estado civil</label><select id="fEstadoCivil"><option value="">Não informado</option><option>Solteiro(a)</option><option>Casado(a)</option><option>União estável</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></div>
+      <div><label>Quantos dependentes?</label><input id="fDependentes" type="number" min="0" value="0"></div>
     </div>
     <div class="grid g4" style="margin-bottom:14px">
       <div><label>Valor do imóvel (R$)</label><input id="fImovel" type="text" inputmode="numeric" placeholder="500.000"></div>
@@ -195,8 +208,13 @@
     <div class="grid g4" style="margin-bottom:18px">
       <div><label>Sistema de amortização</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
       <div><label>Imóvel</label><select id="fCondicao"><option value="novo">Novo</option><option value="usado">Usado</option></select></div>
-      <div><label>Tem 3+ anos de FGTS (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
+      <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
       <div><label>Primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
+    </div>
+    <div class="grid g4" style="margin-bottom:18px">
+      <div><label>Vai usar FGTS na compra?</label><select id="fUsarFgts"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
+      <div><label>Valor do FGTS (R$)</label><input id="fFgts" type="text" inputmode="numeric" placeholder="0"></div>
+      <div style="grid-column:span 2;align-self:end"><div class="aviso" style="margin:0">Se o cônjuge ou outra pessoa participar da compra, colete os mesmos dados de todos os proponentes.</div></div>
     </div>
     <button class="btn gold" onclick="simular()">Calcular simulação</button>
     <div id="simErro"></div>
@@ -319,7 +337,7 @@ function mascaraMoeda(el){
   const dig = el.value.replace(/\D/g,'');
   el.value = dig ? Number(dig).toLocaleString('pt-BR') : '';
 }
-['fImovel','fEntrada','fRenda'].forEach(id=>{
+['fImovel','fEntrada','fRenda','fFgts'].forEach(id=>{
   document.addEventListener('input', e => { if(e.target.id===id) mascaraMoeda(e.target); });
 });
 
@@ -484,11 +502,19 @@ let EDITANDO = null; // id da simulação em edição
 
 function simular(){
   el('simErro').innerHTML = '';
+  const usarFgts = el('fUsarFgts').value;
+  const valorFgts = usarFgts === 'sim' ? lerMoeda('fFgts') : 0;
+  const entradaPropria = lerMoeda('fEntrada');
   const d = {
     cliente: el('fCliente').value.trim(),
     contato: el('fContato').value.trim(),
+    cpf: el('fCpf').value.trim(),
+    estadoCivil: el('fEstadoCivil').value,
+    dependentes: parseInt(el('fDependentes').value) || 0,
+    usarFgts, valorFgts, entradaPropria,
+    corretor: PERFIL ? (PERFIL.nome || PERFIL.email) : '',
     valorImovel: lerMoeda('fImovel'),
-    entrada: lerMoeda('fEntrada'),
+    entrada: entradaPropria + valorFgts,
     renda: lerMoeda('fRenda'),
     prazoMeses: (parseInt(el('fPrazo').value)||35) * 12,
     sistema: el('fSistema').value,
@@ -802,6 +828,12 @@ function editarSimulacao(id){
   el('fCotista').value = d.cotista||'sim';
   el('fPrimeiro').value = d.primeiro||'sim';
   el('fNasc').value = d.nasc||'';
+  el('fCpf').value = d.cpf||'';
+  el('fEstadoCivil').value = d.estadoCivil||'';
+  el('fDependentes').value = d.dependentes||0;
+  el('fUsarFgts').value = d.usarFgts||'nao';
+  el('fFgts').value = d.valorFgts ? Number(d.valorFgts).toLocaleString('pt-BR') : '';
+  if (d.entradaPropria !== undefined) el('fEntrada').value = d.entradaPropria ? Number(d.entradaPropria).toLocaleString('pt-BR') : '';
   EDITANDO = id;
   uiNav('sim');
   el('simErro').innerHTML = `<div class="aviso">Editando a simulação de <b>${s.cliente_nome}</b>. Recalcule e clique em "Atualizar simulação" para sobrescrever o registro salvo.</div>`;
@@ -814,27 +846,40 @@ function gerarRelatorio(sim, meta){
   const d = sim.dados||{}, res = sim.resultados||[], m = res[0]||{}, custos = sim.custos||{};
   const hoje = new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'});
   const cur = sim.curadoria && sim.curadoria.length ? sim.curadoria : curadoria(d, res, custos);
+  const dataSim = meta?.data ? new Date(meta.data).toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'}) : hoje;
+  const corretor = meta?.corretor || d.corretor || (typeof PERFIL!=='undefined' && PERFIL ? (PERFIL.nome||PERFIL.email) : '') || '—';
   el('relatorio').innerHTML = `
   <div class="rel-capa">
     <div>
       <h1>Simulação Consultiva de Financiamento Imobiliário</h1>
       <div class="sub">Curadoria de crédito · Mude Imóveis · Dourados-MS</div>
+      <div class="rel-meta">Data da simulação: <b style="color:#fff">${dataSim}</b> &nbsp;·&nbsp; Corretor responsável: <b style="color:#fff">${corretor}</b></div>
     </div>
     <img class="mude-logo" alt="Mude Imóveis">
   </div>
   <div class="rel-faixa"></div>
   <div class="rel-corpo">
-    <h2>Dados da simulação</h2>
+    <h2>Confira os seus dados</h2>
     <div class="rel-grid">
-      <div><small>Cliente</small><b>${meta?.cliente || d.cliente || '—'}</b></div>
+      <div><small>1 · Nome completo</small><b>${meta?.cliente || d.cliente || '—'}</b></div>
+      <div><small>2 · CPF</small><b>${d.cpf || '—'}</b></div>
+      <div><small>3 · Data de nascimento</small><b>${d.nasc ? new Date(d.nasc+'T12:00:00').toLocaleDateString('pt-BR') : '—'}</b></div>
+      <div><small>4 · Renda bruta (holerite / IR)</small><b>${d.renda?fmtBRL(d.renda):'—'}</b></div>
+      <div><small>5 · Carteira assinada há 3+ anos</small><b>${d.cotista==='sim'?'Sim':'Não'}</b></div>
+      <div><small>6 · Vai usar FGTS?</small><b>${d.usarFgts==='sim' ? 'Sim · '+fmtBRL(d.valorFgts||0) : 'Não'}</b></div>
+      <div><small>7 · Estado civil</small><b>${d.estadoCivil || '—'}</b></div>
+      <div><small>8 · Dependentes</small><b>${d.dependentes ?? '—'}</b></div>
       <div><small>Contato</small><b>${meta?.contato || d.contato || '—'}</b></div>
-      <div><small>Data</small><b>${hoje}</b></div>
+    </div>
+    <div class="rel-obs"><b>Obs.:</b> se o cônjuge ou outra pessoa participar da compra, os mesmos dados devem ser informados por todos os proponentes. Confira as informações acima; qualquer divergência altera o resultado da análise do banco.</div>
+    <h2>Parâmetros da operação</h2>
+    <div class="rel-grid">
       <div><small>Valor do imóvel</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
-      <div><small>Entrada</small><b>${fmtBRL(d.valorImovel-(m.financiado||0))}</b></div>
-      <div><small>Renda familiar informada</small><b>${d.renda?fmtBRL(d.renda):'—'}</b></div>
-      <div><small>Sistema</small><b>${d.sistema||'SAC'} · ${Math.round((m.prazoMeses||d.prazoMeses||0)/12)} anos</b></div>
+      <div><small>Entrada em recursos próprios</small><b>${fmtBRL(d.entradaPropria ?? (d.valorImovel-(m.financiado||0)))}</b></div>
+      <div><small>FGTS na entrada</small><b>${d.usarFgts==='sim'?fmtBRL(d.valorFgts||0):'—'}</b></div>
+      <div><small>Entrada total</small><b>${fmtBRL(d.valorImovel-(m.financiado||0))}</b></div>
+      <div><small>Sistema · prazo</small><b>${d.sistema||'SAC'} · ${Math.round((m.prazoMeses||d.prazoMeses||0)/12)} anos</b></div>
       <div><small>Imóvel</small><b>${d.condicao==='usado'?'Usado':'Novo'}</b></div>
-      <div><small>Cotista FGTS (3+ anos)</small><b>${d.cotista==='sim'?'Sim':'Não'}</b></div>
     </div>
     <h2>Melhor condição encontrada</h2>
     <div class="rel-destaque">
@@ -859,11 +904,41 @@ function gerarRelatorio(sim, meta){
     </div>
     <h2>Curadoria Mude · leitura consultiva</h2>
     <div class="rel-cur">${cur.map(i=>`<p><span class="rot">${i.rotulo}.</span> ${i.texto}</p>`).join('')}</div>
+    <h2>Documentos para a contratação (após aprovação da proposta)</h2>
+    <div class="rel-doc">
+      <h3>Documentos pessoais do comprador</h3>
+      <ul>
+        <li>RG e CPF ou CNH (originais e cópias)</li>
+        <li>Comprovante de estado civil atualizado (certidão de nascimento ou casamento)</li>
+        <li>Comprovante de residência recente (emitido nos últimos 90 dias)</li>
+        <li>Extrato do FGTS atualizado e carteira de trabalho, se for usar o fundo</li>
+        <li>Última declaração do Imposto de Renda com o recibo de entrega</li>
+      </ul>
+    </div>
+    <div class="rel-doc">
+      <h3>Comprovante de renda (conforme o perfil)</h3>
+      <ul>
+        <li><b>Trabalhadores CLT:</b> os três últimos holerites e a cópia da carteira de trabalho</li>
+        <li><b>Autônomos ou profissionais liberais:</b> extratos bancários dos últimos meses e declaração de renda</li>
+        <li><b>Empresários:</b> contrato social da empresa e pró-labore recente</li>
+        <li><b>Aposentados ou pensionistas:</b> extrato recente do benefício do INSS</li>
+      </ul>
+    </div>
+    <div class="rel-doc">
+      <h3>Documentos do imóvel e do vendedor</h3>
+      <ul>
+        <li>Matrícula atualizada do imóvel com certidão de ônus reais</li>
+        <li>Capa do IPTU do ano vigente com a metragem do imóvel</li>
+        <li>Documentos pessoais do vendedor (RG, CPF e comprovante de estado civil)</li>
+        <li>Certidões negativas de débitos do vendedor (federais, estaduais e trabalhistas)</li>
+      </ul>
+    </div>
+    <div class="rel-obs">Se o cônjuge ou outro participante compuser renda, apresentar os mesmos documentos de todos os proponentes. A equipe Mude confere o dossiê completo antes do protocolo no banco.</div>
     <h2>Acompanhamento Mude Imóveis</h2>
     <p style="line-height:1.65">A Mude Imóveis mantém parceria com correspondentes bancários credenciados de todos os principais bancos e acompanha o cliente em todas as etapas do financiamento: da simulação e organização dos documentos à análise de crédito, avaliação do imóvel e assinatura do contrato. Este material é uma curadoria comercial de mercado e não substitui a análise de crédito da instituição financeira.</p>
     <div class="rel-rodape">
       <img class="mude-logo" alt="Mude Imóveis">
-      <div style="text-align:right">Mude Imóveis · Dourados-MS<br><b style="color:#141414">Mude que a Gente te Acompanha.</b></div>
+      <div style="text-align:right">Mude Imóveis · Dourados-MS · Simulação de ${dataSim} · Corretor: ${corretor}<br><b style="color:#141414">Mude que a Gente te Acompanha.</b></div>
     </div>
   </div>`;
   aplicarLogos();
@@ -871,7 +946,7 @@ function gerarRelatorio(sim, meta){
 function gerarPDF(sim, meta){ gerarRelatorio(sim, meta); setTimeout(()=>window.print(), 150); }
 function gerarPDFSalva(id){
   const s = SIMS.find(x=>x.id===id); if (!s) return;
-  gerarPDF(s.dados, {cliente:s.cliente_nome, contato:s.cliente_contato});
+  gerarPDF(s.dados, {cliente:s.cliente_nome, contato:s.cliente_contato, data:s.created_at, corretor:s.dados?.dados?.corretor});
 }
 
 /* ============================ WHATSAPP ============================ */
