@@ -1,0 +1,30 @@
+{
+  "descricao": "Valores de referência usados pelo robô de verificação. Quando o robô encontrar um número diferente nos sites monitorados, ele abre um alerta (Issue) no GitHub. Após confirmar a mudança e atualizar o painel administrativo, atualize também este arquivo para silenciar o alerta.",
+  "atualizado_em": "2026-08-03",
+  "fontes": [
+    {
+      "banco": "Itaú",
+      "url": "https://www.itau.com.br/emprestimos-financiamentos/credito-imobiliario/",
+      "referencia": "11,70",
+      "dica": "Procurar percentual anunciado como 'a partir de X% a.a.'"
+    },
+    {
+      "banco": "Inter",
+      "url": "https://inter.co/pra-voce/financiamento-imobiliario/residencial/taxa-bonificada/",
+      "referencia": "9,4",
+      "dica": "Taxa bonificada anunciada na página"
+    },
+    {
+      "banco": "Radar geral (MySide)",
+      "url": "https://myside.com.br/guia-imoveis/taxa-juros-financiamento-imobiliario",
+      "referencia": "10,26",
+      "dica": "Menor taxa Caixa divulgada no radar"
+    },
+    {
+      "banco": "Radar geral (Larya)",
+      "url": "https://larya.com.br/blog/taxas-de-juros-financiamento-imobiliario-2026/",
+      "referencia": "11,19",
+      "dica": "Taxa Caixa com relacionamento divulgada no ranking"
+    }
+  ]
+}
