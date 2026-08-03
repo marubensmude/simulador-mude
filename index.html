@@ -97,7 +97,7 @@
   .parceria b{color:var(--dourado)}
   .acoes-sim{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .form-inline{background:var(--cinza);border-radius:8px;padding:16px;margin:14px 0;display:none}
-  #relatorio{display:none;background:#fff}
+  #relatorio{background:#fff}
   @media print{
     body>*{display:none!important}
     #relatorio{display:block!important}
@@ -289,9 +289,11 @@
 <div class="rodape-doc">Mude Imóveis · curadoria comercial de mercado; não substitui a análise de crédito das instituições financeiras.<br>Mude que a Gente te Acompanha.</div>
 </main>
 </div>
-<div id="relatorio"></div>
+<div id="relatorio" style="display:none"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 <script>
 /* =====================================================================
    SIMULADOR MUDE · Mude Imóveis · Dourados-MS
@@ -1133,10 +1135,77 @@ function textoWhats(sim, meta){
   L.push('_Mude que a Gente te Acompanha._');
   return L.join('\n');
 }
-function enviarWhats(sim, meta){
+function acharCorteBranco(ctx, w, minY, maxY){
+  // procura, de baixo para cima, uma linha praticamente branca para a quebra de página
+  for (let yy = maxY; yy > minY; yy -= 2){
+    const data = ctx.getImageData(0, yy, w, 1).data;
+    let claros = 0, total = 0;
+    for (let x = 0; x < w * 4; x += 32){
+      total++;
+      if (data[x] > 246 && data[x+1] > 246 && data[x+2] > 246) claros++;
+    }
+    if (claros / total > 0.995) return yy;
+  }
+  return maxY;
+}
+async function gerarPdfArquivo(sim, meta){
+  gerarRelatorio(sim, meta);
+  const rel = el('relatorio');
+  rel.style.display = 'block'; rel.style.position = 'absolute';
+  rel.style.left = '0'; rel.style.top = '0'; rel.style.width = '700px'; rel.style.zIndex = '-1';
+  let canvas;
+  try {
+    canvas = await html2canvas(rel, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+  } finally {
+    rel.style.display = 'none'; rel.style.position = '';
+    rel.style.left = ''; rel.style.top = ''; rel.style.width = ''; rel.style.zIndex = '';
+  }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const mT = 20, mR = 15, mB = 20, mL = 20;           // margens: 2 / 1,5 / 2 / 2 cm
+  const cw = 210 - mL - mR, ch = 297 - mT - mB;
+  const pxPorMm = canvas.width / cw;
+  const paginaPx = Math.floor(ch * pxPorMm);
+  const ctx = canvas.getContext('2d');
+  let y = 0, primeira = true;
+  while (y < canvas.height - 4){
+    let fim = Math.min(y + paginaPx, canvas.height);
+    if (fim < canvas.height) fim = acharCorteBranco(ctx, canvas.width, y + Math.floor(paginaPx * 0.6), fim);
+    const h = fim - y;
+    const fatia = document.createElement('canvas');
+    fatia.width = canvas.width; fatia.height = h;
+    fatia.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+    if (!primeira) pdf.addPage();
+    pdf.addImage(fatia.toDataURL('image/jpeg', 0.92), 'JPEG', mL, mT, cw, h / pxPorMm);
+    primeira = false; y = fim;
+  }
+  return pdf.output('blob');
+}
+async function enviarWhats(sim, meta){
+  const nomeCliente = (meta?.cliente || sim.dados?.cliente || 'cliente').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w ]/g,'').trim().replace(/ +/g,'-') || 'cliente';
+  const arquivo = 'Simulacao-Mude-' + nomeCliente + '.pdf';
+  const msg = 'Olá! Segue em PDF a sua simulação consultiva de financiamento, preparada pela Mude Imóveis. Qualquer dúvida, estou à disposição. Mude que a Gente te Acompanha.';
+  let blob = null;
+  try { blob = await gerarPdfArquivo(sim, meta); } catch(e){ console.warn('PDF:', e); }
   const contato = (meta?.contato || sim.dados?.contato || '').replace(/\D/g,'');
-  const fone = contato.length >= 10 ? (contato.startsWith('55') ? contato : '55'+contato) : '';
-  window.open('https://wa.me/' + fone + '?text=' + encodeURIComponent(textoWhats(sim, meta)), '_blank');
+  const fone = contato.length >= 10 ? (contato.startsWith('55') ? contato : '55' + contato) : '';
+  // Celular (e computadores com compartilhamento nativo): PDF já anexado
+  if (blob && navigator.canShare){
+    const file = new File([blob], arquivo, { type: 'application/pdf' });
+    if (navigator.canShare({ files: [file] })){
+      try { await navigator.share({ files: [file], text: msg }); return; }
+      catch(e){ if (e.name === 'AbortError') return; }
+    }
+  }
+  // Computador: baixa o PDF e abre a conversa do cliente
+  if (blob){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = arquivo;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  }
+  window.open('https://wa.me/' + fone + '?text=' + encodeURIComponent(msg), '_blank');
+  if (blob) setTimeout(() => alert('O PDF "' + arquivo + '" foi baixado. Na conversa do WhatsApp que abriu, clique no clipe (anexar) ou arraste o arquivo para enviá-lo ao cliente.'), 500);
 }
 function enviarWhatsSalva(id){
   const s = SIMS.find(x=>x.id===id); if (!s) return;
