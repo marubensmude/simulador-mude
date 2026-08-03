@@ -309,7 +309,6 @@ const PARAM = {
   tarifaMensal: 25,          // tarifa de administração (R$/mês)
   dfi: 0.00006,              // DFI ~0,006% a.m. sobre o valor do imóvel
   itbi: 0.02,                // ITBI Dourados-MS 2%
-  cartorio: 0.0125,          // registro ~1,25% do valor do imóvel
   avaliacaoBanco: 3000,      // taxa média de avaliação do banco (R$)
   idadeLimite: 80.5,         // idade + prazo <= 80 anos e 6 meses
   tetoSFH: 2250000,          // teto do SFH / uso do FGTS
@@ -480,11 +479,33 @@ function linhasElegiveis(taxas, d){
   });
 }
 
+/* Registro de Imóveis de Dourados-MS · Tabela de Emolumentos 2026 (Tabela III-C, valores totais)
+   Lei Estadual 6.183/2023 · Provimento 327/2024 · vigência 01/01/2026 */
+const TAB_REGISTRO = [
+  [5000,142.38],[10000,259.09],[15000,374.24],[20000,490.81],[25000,604.43],[30000,719.44],
+  [35000,836.17],[40000,951.33],[45000,1068.03],[50000,1183.07],[55000,1414.93],[60000,1529.96],
+  [65000,1646.67],[70000,1760.29],[75000,1875.29],[80000,1990.46],[85000,2107.18],[90000,2222.19],
+  [95000,2338.83],[100000,2569.08],[110000,2683.01],[120000,2799.41],[130000,2914.44],[140000,3029.58],
+  [150000,3144.60],[160000,3240.52],[170000,3336.44],[180000,3432.36],[190000,3528.30],[200000,3624.22],
+  [210000,3717.02],[220000,3809.68],[230000,3902.49],[240000,3995.16],[250000,4087.82],[260000,4257.30],
+  [270000,4426.79],[280000,4596.29],[290000,4765.76],[300000,4935.11],[325000,5016.74],[350000,5098.24],
+  [375000,5179.71],[400000,5261.35],[425000,5342.88],[450000,5424.33],[475000,5505.97],[500000,5587.46],
+  [600000,5668.94],[700000,5750.44],[800000,5832.06],[900000,5913.55],[1000000,5995.05],[2000000,6408.71],
+  [3000000,6903.88],[4000000,7399.05],[5000000,7894.20],[7000000,8389.37],[9000000,8884.52],[Infinity,9379.69]
+];
+function emolumentoRegistro(valor){
+  for (const [lim, total] of TAB_REGISTRO) if (valor <= lim) return total;
+  return TAB_REGISTRO[TAB_REGISTRO.length-1][1];
+}
+
 /* Custos de aquisição (Dourados-MS) */
-function custosAquisicao(d){
+function custosAquisicao(d, financiado){
   const itbi = d.valorImovel * PARAM.itbi;
-  const cart = d.valorImovel * PARAM.cartorio * (d.primeiro === 'sim' ? 0.5 : 1);
-  return { itbi, cartorio: cart, avaliacao: PARAM.avaliacaoBanco, total: itbi + cart + PARAM.avaliacaoBanco };
+  const fator = d.primeiro === 'sim' ? 0.5 : 1; // 50%: 1ª aquisição residencial pelo SFH (art. 290, Lei 6.015/73)
+  const regCompra = emolumentoRegistro(d.valorImovel) * fator;
+  const regFiduciaria = financiado > 0 ? emolumentoRegistro(financiado) * fator : 0;
+  const cart = regCompra + regFiduciaria;
+  return { itbi, cartorio: cart, regCompra, regFiduciaria, avaliacao: PARAM.avaliacaoBanco, total: itbi + cart + PARAM.avaliacaoBanco };
 }
 </script>
 <script>
@@ -626,7 +647,7 @@ function simular(){
   const eleg = linhasElegiveis(TAXAS, d);
   const resultados = eleg.map(t => calcular(t, d)).sort((a,b)=>a.parcela1-b.parcela1);
   const melhor = resultados[0];
-  const custos = custosAquisicao(d);
+  const custos = custosAquisicao(d, melhor ? melhor.financiado : 0);
   ULTIMA = { dados:d, custos, resultados: resultados.map(r=>({
       instituicao:r.linha.instituicao, linha:r.linha.linha, taxa_aa:r.linha.taxa_aa,
       correcao:r.linha.correcao, obs:r.linha.obs,
@@ -679,7 +700,7 @@ function desenharResultado(d, resultados, melhor, custos){
     <div class="secao-titulo"><h3>Custos de aquisição em Dourados-MS</h3></div>
     <div class="kv">
       <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi)}</b></div>
-      <div><small>Registro em cartório${d.primeiro==='sim'?' (com desconto de 50%)':''}</small><b>${fmtBRL(custos.cartorio)}</b></div>
+      <div><small>Registro em cartório · tabela oficial 2026${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio)}</b></div>
       <div><small>Avaliação do banco (média)</small><b>${fmtBRL(custos.avaliacao)}</b></div>
       <div><small>Total de despesas estimadas</small><b>${fmtBRL(custos.total)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-m.financiado)+custos.total)}</b></div>
@@ -1045,9 +1066,11 @@ function gerarRelatorio(sim, meta){
       <tbody>${res.map(r=>`<tr><td><b>${r.instituicao}</b></td><td>${r.linha}</td><td style="text-align:right">${fmtPct(r.taxa_aa)}</td><td style="text-align:right">${fmtBRL2(r.parcela1)}</td><td style="text-align:right">${fmtBRL(r.rendaMinima)}</td><td style="text-align:right">${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
     </table>
     <h2>Custos de aquisição estimados (Dourados-MS)</h2>
+    <p style="font-size:11px;color:#867e6e;margin:0 0 10px">Registro conforme a Tabela de Emolumentos 2026 do Registro de Imóveis de MS (Lei Estadual 6.183/2023), somando o registro da compra e venda e o da alienação fiduciária do financiamento. ITBI de Dourados: 2%.</p>
     <div class="rel-grid">
       <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi||0)}</b></div>
-      <div><small>Registro em cartório</small><b>${fmtBRL(custos.cartorio||0)}</b></div>
+      <div><small>Registro em cartório${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio||0)}</b></div>
+      ${custos.regCompra ? `<div><small>· sendo compra e venda</small><b>${fmtBRL(custos.regCompra)}</b></div><div><small>· sendo alienação fiduciária</small><b>${fmtBRL(custos.regFiduciaria||0)}</b></div>` : ''}
       <div><small>Avaliação do banco</small><b>${fmtBRL(custos.avaliacao||0)}</b></div>
       <div><small>Total de despesas</small><b>${fmtBRL(custos.total||0)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-(m.financiado||0))+(custos.total||0))}</b></div>
