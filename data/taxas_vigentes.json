@@ -1,0 +1,20 @@
+{
+  "descricao": "Curadoria de taxas da Mude Imóveis. O botão 'Atualizar taxas' do painel administrativo lê este arquivo e mostra as diferenças em relação à tabela em uso antes de aplicar. Para atualizar, peça ao assistente da Mude uma nova curadoria; ele reescreve este arquivo no GitHub.",
+  "data_referencia": "03/08/2026",
+  "taxas": [
+    { "instituicao": "Caixa", "linha": "MCMV Faixa 1", "taxa_aa": 4.50, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Caixa", "linha": "MCMV Faixa 2", "taxa_aa": 5.50, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Caixa", "linha": "MCMV Faixa 3", "taxa_aa": 8.16, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Caixa", "linha": "MCMV Faixa 4", "taxa_aa": 10.50, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Caixa", "linha": "Pró-Cotista FGTS", "taxa_aa": 9.01, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "BB", "linha": "Pró-Cotista FGTS", "taxa_aa": 9.00, "cota_max": 80, "prazo_max_meses": 360 },
+    { "instituicao": "Caixa", "linha": "SBPE", "taxa_aa": 11.19, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Caixa", "linha": "SBPE Poupança", "taxa_aa": 10.76, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "BB", "linha": "SBPE", "taxa_aa": 11.60, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Itaú", "linha": "SBPE", "taxa_aa": 11.70, "cota_max": 90, "prazo_max_meses": 420 },
+    { "instituicao": "Bradesco", "linha": "SBPE", "taxa_aa": 11.70, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Santander", "linha": "SBPE", "taxa_aa": 11.69, "cota_max": 80, "prazo_max_meses": 420 },
+    { "instituicao": "Inter", "linha": "SBPE", "taxa_aa": 13.76, "cota_max": 75, "prazo_max_meses": 360 },
+    { "instituicao": "Sicredi", "linha": "SBPE", "taxa_aa": 10.33, "cota_max": 90, "prazo_max_meses": 420 }
+  ]
+}
