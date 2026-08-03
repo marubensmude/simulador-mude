@@ -1,0 +1,42 @@
+# Robô de verificação de taxas · Simulador Mude
+# Roda toda segunda-feira às 8h (horário de Mato Grosso do Sul, UTC-4 => 12h UTC)
+# e também pode ser disparado manualmente na aba Actions ("Run workflow").
+# Quando detecta possível mudança, abre uma Issue no repositório
+# (ative "Watch" no repositório para receber por e-mail).
+name: Verificar taxas dos bancos
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Rodar verificação
+        id: robo
+        run: node scripts/verifica_taxas.mjs
+      - name: Abrir alerta se houver mudança
+        if: steps.robo.outputs.mudanca == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const corpo = fs.readFileSync('relatorio_taxas.md', 'utf8');
+            const data = new Date().toLocaleDateString('pt-BR');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Taxas: possível mudança detectada (${data})`,
+              body: corpo,
+              labels: ['taxas']
+            });
