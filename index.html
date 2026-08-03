@@ -197,12 +197,13 @@
     <div class="sub">Preencha os dados do cliente e do imóvel. A plataforma enquadra automaticamente no programa mais vantajoso e compara todas as instituições.</div>
     <div class="grid g3" style="margin-bottom:14px">
       <div><label>Nome completo do cliente</label><input id="fCliente" placeholder="Nome e sobrenome"></div>
-      <div><label>Contato (WhatsApp / e-mail)</label><input id="fContato" placeholder="(67) 9…"></div>
-      <div><label>Data de nascimento do proponente mais velho</label><input id="fNasc" type="date"></div>
+      <div><label>Telefone (WhatsApp)</label><input id="fContato" inputmode="tel" placeholder="+55 (67) 99999-9999"></div>
+      <div><label>Data de nascimento</label><input id="fNasc" type="date"><small id="idadeInfo" style="display:block;color:var(--texto2);margin-top:4px"></small></div>
     </div>
-    <div class="grid g3" style="margin-bottom:14px">
-      <div><label>CPF</label><input id="fCpf" inputmode="numeric" placeholder="000.000.000-00"></div>
+    <div class="grid g4" style="margin-bottom:14px">
+      <div><label>CPF</label><input id="fCpf" inputmode="numeric" placeholder="000.000.000-00" maxlength="14"><small id="cpfErro" style="display:block;color:var(--vermelho);margin-top:4px"></small></div>
       <div><label>Estado civil</label><select id="fEstadoCivil"><option value="">Não informado</option><option>Solteiro(a)</option><option>Casado(a)</option><option>União estável</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></div>
+      <div><label>Situação profissional</label><select id="fSituacao"><option value="">Não informado</option><option>Funcionário CLT</option><option>MEI</option><option>Autônomo</option><option>Empresário</option><option>Agricultor</option><option>Funcionário Público</option><option>Outro</option></select></div>
       <div><label>Quantos dependentes?</label><input id="fDependentes" type="number" min="0" value="0"></div>
     </div>
     <div class="grid g4" style="margin-bottom:14px">
@@ -217,10 +218,27 @@
       <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
       <div><label>Primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
     </div>
-    <div class="grid g4" style="margin-bottom:18px">
+    <div class="grid g4" style="margin-bottom:14px">
       <div><label>Vai usar FGTS na compra?</label><select id="fUsarFgts"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
       <div><label>Valor do FGTS (R$)</label><input id="fFgts" type="text" inputmode="numeric" placeholder="0"></div>
-      <div style="grid-column:span 2;align-self:end"><div class="aviso" style="margin:0">Se o cônjuge ou outra pessoa participar da compra, colete os mesmos dados de todos os proponentes.</div></div>
+      <div><label>Renda composta (2º comprador)?</label><select id="fComposta" onchange="uiComposta()"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
+      <div id="boxPerc1" style="display:none"><label>% do comprador principal na compra</label><input id="fPerc1" type="number" min="1" max="99" value="50" oninput="uiPerc()"></div>
+    </div>
+    <div id="blocoComprador2" style="display:none;border:1px solid var(--cinza2);border-radius:8px;padding:16px;margin-bottom:18px;background:#faf9f6">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--texto2);font-weight:700">2º comprador · composição de renda</div>
+        <div style="font-size:12.5px;color:var(--texto2)">Participação na compra: principal <b id="perc1Info">50%</b> · 2º comprador <b id="perc2Info">50%</b></div>
+      </div>
+      <div class="grid g3" style="margin-bottom:12px">
+        <div><label>Nome completo</label><input id="fNome2"></div>
+        <div><label>CPF</label><input id="fCpf2" inputmode="numeric" placeholder="000.000.000-00" maxlength="14"><small id="cpfErro2" style="display:block;color:var(--vermelho);margin-top:4px"></small></div>
+        <div><label>Data de nascimento</label><input id="fNasc2" type="date"><small id="idadeInfo2" style="display:block;color:var(--texto2);margin-top:4px"></small></div>
+      </div>
+      <div class="grid g3">
+        <div><label>Estado civil</label><select id="fEstadoCivil2"><option value="">Não informado</option><option>Solteiro(a)</option><option>Casado(a)</option><option>União estável</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></div>
+        <div><label>Situação profissional</label><select id="fSituacao2"><option value="">Não informado</option><option>Funcionário CLT</option><option>MEI</option><option>Autônomo</option><option>Empresário</option><option>Agricultor</option><option>Funcionário Público</option><option>Outro</option></select></div>
+        <div><label>Renda bruta mensal (R$)</label><input id="fRenda2" type="text" inputmode="numeric" placeholder="5.000"></div>
+      </div>
     </div>
     <button class="btn gold" onclick="simular()">Calcular simulação</button>
     <div id="simErro"></div>
@@ -290,7 +308,7 @@ const PARAM = {
   comprometimento: 0.30,     // 30% da renda bruta
   tarifaMensal: 25,          // tarifa de administração (R$/mês)
   dfi: 0.00006,              // DFI ~0,006% a.m. sobre o valor do imóvel
-  itbi: 0.025,               // ITBI Dourados-MS 2,5% (confirmar vigência)
+  itbi: 0.02,                // ITBI Dourados-MS 2%
   cartorio: 0.0125,          // registro ~1,25% do valor do imóvel
   avaliacaoBanco: 3000,      // taxa média de avaliação do banco (R$)
   idadeLimite: 80.5,         // idade + prazo <= 80 anos e 6 meses
@@ -343,9 +361,62 @@ function mascaraMoeda(el){
   const dig = el.value.replace(/\D/g,'');
   el.value = dig ? Number(dig).toLocaleString('pt-BR') : '';
 }
-['fImovel','fEntrada','fRenda','fFgts'].forEach(id=>{
-  document.addEventListener('input', e => { if(e.target.id===id) mascaraMoeda(e.target); });
+function fmtCPF(d){
+  d = d.slice(0,11);
+  let s = d.slice(0,3);
+  if (d.length > 3) s += '.' + d.slice(3,6);
+  if (d.length > 6) s += '.' + d.slice(6,9);
+  if (d.length > 9) s += '-' + d.slice(9,11);
+  return s;
+}
+function validarCPF(cpf){
+  const d = (cpf||'').replace(/\D/g,'');
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  let s = 0; for (let i=0;i<9;i++) s += +d[i]*(10-i);
+  let dv = (s*10) % 11; if (dv === 10) dv = 0;
+  if (dv !== +d[9]) return false;
+  s = 0; for (let i=0;i<10;i++) s += +d[i]*(11-i);
+  dv = (s*10) % 11; if (dv === 10) dv = 0;
+  return dv === +d[10];
+}
+function checaCPF(inputId, erroId){
+  const v = el(inputId).value, e = el(erroId);
+  e.textContent = (v.length === 14 && !validarCPF(v)) ? 'CPF inválido: confira os números.' : '';
+  return !e.textContent;
+}
+function fmtFone(dig){
+  let d = dig.replace(/\D/g,'');
+  if (d.startsWith('55')) d = d.slice(2);
+  d = d.slice(0,11);
+  if (!d) return '';
+  let s = '+55';
+  s += ' (' + d.slice(0,2) + (d.length >= 2 ? ')' : '');
+  if (d.length > 2) s += ' ' + d.slice(2, d.length > 10 ? 7 : 6);
+  if (d.length > (d.length > 10 ? 7 : 6)) s += '-' + d.slice(d.length > 10 ? 7 : 6);
+  return s;
+}
+document.addEventListener('input', e => {
+  const id = e.target.id;
+  if (['fImovel','fEntrada','fRenda','fFgts','fRenda2'].includes(id)) mascaraMoeda(e.target);
+  if (id === 'fCpf'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf','cpfErro'); }
+  if (id === 'fCpf2'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf2','cpfErro2'); }
+  if (id === 'fContato') e.target.value = fmtFone(e.target.value);
 });
+document.addEventListener('change', e => {
+  if (e.target.id === 'fNasc') el('idadeInfo').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
+  if (e.target.id === 'fNasc2') el('idadeInfo2').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
+});
+function uiComposta(){
+  const sim = el('fComposta').value === 'sim';
+  el('blocoComprador2').style.display = sim ? 'block' : 'none';
+  el('boxPerc1').style.display = sim ? 'block' : 'none';
+  uiPerc();
+}
+function uiPerc(){
+  const p1 = Math.min(99, Math.max(1, parseInt(el('fPerc1').value) || 50));
+  el('perc1Info').textContent = p1 + '%';
+  el('perc2Info').textContent = (100 - p1) + '%';
+}
 
 /* ============================ MOTOR DE CÁLCULO ============================ */
 const iMensal = aa => Math.pow(1 + aa/100, 1/12) - 1;
@@ -511,17 +582,36 @@ function simular(){
   const usarFgts = el('fUsarFgts').value;
   const valorFgts = usarFgts === 'sim' ? lerMoeda('fFgts') : 0;
   const entradaPropria = lerMoeda('fEntrada');
+  const cpf1 = el('fCpf').value.trim();
+  if (cpf1 && !validarCPF(cpf1)){ el('simErro').innerHTML = '<div class="aviso erro">O CPF do comprador principal é inválido. Confira os números antes de calcular.</div>'; return; }
+  const composta = el('fComposta').value;
+  let c2 = null, perc1 = 100, perc2 = 0;
+  if (composta === 'sim'){
+    const cpf2 = el('fCpf2').value.trim();
+    if (cpf2 && !validarCPF(cpf2)){ el('simErro').innerHTML = '<div class="aviso erro">O CPF do 2º comprador é inválido. Confira os números antes de calcular.</div>'; return; }
+    perc1 = Math.min(99, Math.max(1, parseInt(el('fPerc1').value) || 50));
+    perc2 = 100 - perc1;
+    c2 = {
+      nome: el('fNome2').value.trim(), cpf: cpf2,
+      nasc: el('fNasc2').value, idade: el('fNasc2').value ? idadeDe(el('fNasc2').value) : null,
+      estadoCivil: el('fEstadoCivil2').value, situacao: el('fSituacao2').value,
+      renda: lerMoeda('fRenda2')
+    };
+  }
+  const rendaPrincipal = lerMoeda('fRenda');
   const d = {
     cliente: el('fCliente').value.trim(),
     contato: el('fContato').value.trim(),
-    cpf: el('fCpf').value.trim(),
+    cpf: cpf1,
     estadoCivil: el('fEstadoCivil').value,
+    situacao: el('fSituacao').value,
     dependentes: parseInt(el('fDependentes').value) || 0,
     usarFgts, valorFgts, entradaPropria,
+    composta, perc1, perc2, c2, rendaPrincipal,
     corretor: PERFIL ? (PERFIL.nome || PERFIL.email) : '',
     valorImovel: lerMoeda('fImovel'),
     entrada: entradaPropria + valorFgts,
-    renda: lerMoeda('fRenda'),
+    renda: rendaPrincipal + (c2 ? c2.renda : 0),
     prazoMeses: (parseInt(el('fPrazo').value)||35) * 12,
     sistema: el('fSistema').value,
     condicao: el('fCondicao').value,
@@ -530,6 +620,7 @@ function simular(){
     nasc: el('fNasc').value,
     idade: idadeDe(el('fNasc').value)
   };
+  if (c2 && c2.idade !== null) d.idade = Math.max(d.idade, c2.idade); // regra do proponente mais velho
   if (d.valorImovel < 20000){ el('simErro').innerHTML = '<div class="aviso erro">Informe o valor do imóvel.</div>'; return; }
 
   const eleg = linhasElegiveis(TAXAS, d);
@@ -777,6 +868,10 @@ function curadoria(d, resultados, custos){
     add('dica','Informe a renda', 'Sem a renda familiar não é possível avaliar o enquadramento. Colete esse dado com o cliente para uma leitura completa.');
   }
 
+  // Renda composta
+  if (d.composta === 'sim' && d.c2)
+    add('ok','Renda composta', `Composição com ${d.c2.nome || 'o 2º comprador'}: renda considerada de ${fmtBRL(d.renda)} (${fmtBRL(d.rendaPrincipal||0)} + ${fmtBRL(d.c2.renda||0)}), com participação na compra de ${d.perc1}% e ${d.perc2}%. Os dois entram na análise de crédito, na escritura e devem apresentar a mesma documentação.`);
+
   // Entrada
   if (melhor.financiado < d.valorImovel - d.entrada + 1 && d.entrada < d.valorImovel*0.2)
     add('atencao','Entrada abaixo do mínimo', `A entrada informada não alcança o mínimo da linha escolhida. O FGTS do cliente (e dos demais proponentes) pode compor a entrada, assim como um imóvel ou veículo dado em permuta negociada com o vendedor.`);
@@ -827,7 +922,7 @@ function editarSimulacao(id){
   el('fContato').value = s.cliente_contato||'';
   el('fImovel').value = d.valorImovel ? Number(d.valorImovel).toLocaleString('pt-BR') : '';
   el('fEntrada').value = d.entrada ? Number(d.entrada).toLocaleString('pt-BR') : '';
-  el('fRenda').value = d.renda ? Number(d.renda).toLocaleString('pt-BR') : '';
+  el('fRenda').value = (d.rendaPrincipal ?? d.renda) ? Number(d.rendaPrincipal ?? d.renda).toLocaleString('pt-BR') : '';
   el('fPrazo').value = Math.round((d.prazoMeses||420)/12);
   el('fSistema').value = d.sistema||'SAC';
   el('fCondicao').value = d.condicao||'novo';
@@ -840,11 +935,47 @@ function editarSimulacao(id){
   el('fUsarFgts').value = d.usarFgts||'nao';
   el('fFgts').value = d.valorFgts ? Number(d.valorFgts).toLocaleString('pt-BR') : '';
   if (d.entradaPropria !== undefined) el('fEntrada').value = d.entradaPropria ? Number(d.entradaPropria).toLocaleString('pt-BR') : '';
+  el('fSituacao').value = d.situacao||'';
+  el('fComposta').value = d.composta||'nao';
+  el('fPerc1').value = d.perc1||50;
+  el('fNome2').value = d.c2?.nome||'';
+  el('fCpf2').value = d.c2?.cpf||'';
+  el('fNasc2').value = d.c2?.nasc||'';
+  el('fEstadoCivil2').value = d.c2?.estadoCivil||'';
+  el('fSituacao2').value = d.c2?.situacao||'';
+  el('fRenda2').value = d.c2?.renda ? Number(d.c2.renda).toLocaleString('pt-BR') : '';
+  uiComposta();
+  el('idadeInfo').textContent = d.nasc ? idadeDe(d.nasc) + ' anos' : '';
+  el('idadeInfo2').textContent = d.c2?.nasc ? idadeDe(d.c2.nasc) + ' anos' : '';
   EDITANDO = id;
   uiNav('sim');
   el('simErro').innerHTML = `<div class="aviso">Editando a simulação de <b>${s.cliente_nome}</b>. Recalcule e clique em "Atualizar simulação" para sobrescrever o registro salvo.</div>`;
   simular();
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ============================ DOCUMENTOS POR PERFIL ============================ */
+const DOCS_RENDA = {
+  'Funcionário CLT': 'os três últimos holerites e a cópia da carteira de trabalho',
+  'Funcionário Público': 'os três últimos contracheques e o comprovante do vínculo (portaria de nomeação ou termo de posse)',
+  'MEI': 'declaração anual do MEI (DASN-SIMEI), extratos bancários dos últimos 6 meses e notas fiscais emitidas',
+  'Autônomo': 'extratos bancários dos últimos 6 meses, declaração de IR e declaração de renda (DECORE, quando houver)',
+  'Empresário': 'contrato social da empresa, pró-labore recente e declaração de IR (pessoa física e jurídica)',
+  'Agricultor': 'notas fiscais de venda da produção, declaração de IR com atividade rural e ITR do imóvel rural',
+  'Outro': 'comprovantes de renda conforme o caso (extratos bancários, contratos, declarações), com orientação da equipe Mude'
+};
+function docsRendaHTML(d){
+  const linhas = [];
+  const add = (nome, sit) => { if (sit && DOCS_RENDA[sit]) linhas.push(`<li><b>${nome || 'Comprador'} · ${sit}:</b> ${DOCS_RENDA[sit]}</li>`); };
+  add(d.cliente || 'Comprador principal', d.situacao);
+  if (d.composta === 'sim' && d.c2) add(d.c2.nome || '2º comprador', d.c2.situacao);
+  if (!linhas.length){
+    return `<li><b>Trabalhadores CLT:</b> ${DOCS_RENDA['Funcionário CLT']}</li>
+      <li><b>Autônomos ou profissionais liberais:</b> ${DOCS_RENDA['Autônomo']}</li>
+      <li><b>Empresários:</b> ${DOCS_RENDA['Empresário']}</li>
+      <li><b>Aposentados ou pensionistas:</b> extrato recente do benefício do INSS</li>`;
+  }
+  return linhas.join('');
 }
 
 /* ============================ RELATÓRIO PDF PADRÃO MUDE ============================ */
@@ -869,15 +1000,28 @@ function gerarRelatorio(sim, meta){
     <div class="rel-grid">
       <div><small>1 · Nome completo</small><b>${meta?.cliente || d.cliente || '—'}</b></div>
       <div><small>2 · CPF</small><b>${d.cpf || '—'}</b></div>
-      <div><small>3 · Data de nascimento</small><b>${d.nasc ? new Date(d.nasc+'T12:00:00').toLocaleDateString('pt-BR') : '—'}</b></div>
-      <div><small>4 · Renda bruta (holerite / IR)</small><b>${d.renda?fmtBRL(d.renda):'—'}</b></div>
+      <div><small>3 · Data de nascimento</small><b>${d.nasc ? new Date(d.nasc+'T12:00:00').toLocaleDateString('pt-BR') + ' · ' + idadeDe(d.nasc) + ' anos' : '—'}</b></div>
+      <div><small>4 · Renda bruta (holerite / IR)</small><b>${(d.rendaPrincipal ?? d.renda)?fmtBRL(d.rendaPrincipal ?? d.renda):'—'}</b></div>
       <div><small>5 · Carteira assinada há 3+ anos</small><b>${d.cotista==='sim'?'Sim':'Não'}</b></div>
       <div><small>6 · Vai usar FGTS?</small><b>${d.usarFgts==='sim' ? 'Sim · '+fmtBRL(d.valorFgts||0) : 'Não'}</b></div>
       <div><small>7 · Estado civil</small><b>${d.estadoCivil || '—'}</b></div>
       <div><small>8 · Dependentes</small><b>${d.dependentes ?? '—'}</b></div>
+      <div><small>9 · Situação profissional</small><b>${d.situacao || '—'}</b></div>
       <div><small>Contato</small><b>${meta?.contato || d.contato || '—'}</b></div>
     </div>
     <div class="rel-obs"><b>Obs.:</b> se o cônjuge ou outra pessoa participar da compra, os mesmos dados devem ser informados por todos os proponentes. Confira as informações acima; qualquer divergência altera o resultado da análise do banco.</div>
+    ${d.composta==='sim' && d.c2 ? `
+    <h2>2º comprador · composição de renda</h2>
+    <div class="rel-grid">
+      <div><small>Nome completo</small><b>${d.c2.nome||'—'}</b></div>
+      <div><small>CPF</small><b>${d.c2.cpf||'—'}</b></div>
+      <div><small>Data de nascimento</small><b>${d.c2.nasc ? new Date(d.c2.nasc+'T12:00:00').toLocaleDateString('pt-BR') + (d.c2.idade ? ' · ' + d.c2.idade + ' anos' : '') : '—'}</b></div>
+      <div><small>Estado civil</small><b>${d.c2.estadoCivil||'—'}</b></div>
+      <div><small>Situação profissional</small><b>${d.c2.situacao||'—'}</b></div>
+      <div><small>Renda bruta mensal</small><b>${d.c2.renda?fmtBRL(d.c2.renda):'—'}</b></div>
+      <div><small>Participação na compra</small><b>Principal ${d.perc1}% · 2º comprador ${d.perc2}%</b></div>
+      <div><small>Renda composta considerada</small><b>${fmtBRL(d.renda||0)}</b></div>
+    </div>` : ''}
     <h2>Parâmetros da operação</h2>
     <div class="rel-grid">
       <div><small>Valor do imóvel</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
@@ -923,12 +1067,7 @@ function gerarRelatorio(sim, meta){
     </div>
     <div class="rel-doc">
       <h3>Comprovante de renda (conforme o perfil)</h3>
-      <ul>
-        <li><b>Trabalhadores CLT:</b> os três últimos holerites e a cópia da carteira de trabalho</li>
-        <li><b>Autônomos ou profissionais liberais:</b> extratos bancários dos últimos meses e declaração de renda</li>
-        <li><b>Empresários:</b> contrato social da empresa e pró-labore recente</li>
-        <li><b>Aposentados ou pensionistas:</b> extrato recente do benefício do INSS</li>
-      </ul>
+      <ul>${docsRendaHTML(d)}</ul>
     </div>
     <div class="rel-doc">
       <h3>Documentos do imóvel e do vendedor</h3>
