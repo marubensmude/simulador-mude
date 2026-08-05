@@ -517,16 +517,17 @@ function calcModoImovel(linha, d){
   const n = prazoMeses, i = iMensal(linha.taxa_aa), mip = taxaMIP(d.idade);
   const pmax = d.renda * PARAM.comprometimento;
   const fator = (d.sistema === 'SAC') ? (1/n + i + mip) : (i / (1 - Math.pow(1+i,-n)) + mip);
-  const E = d.entrada || 0; // entrada disponível (recursos próprios + FGTS)
+  const E = d.entrada || 0; // entrada disponível (recursos próprios + FGTS) — informativa, não limita a resposta
   let VF = Math.max(0, (pmax - PARAM.tarifaMensal) / (fator + PARAM.dfi));
-  if (E > 0) VF = Math.min(VF, E * cota / (1 - cota));
   let valorImovel = VF + Math.max(E, VF * (1 - cota) / cota);
   const teto = linha.mcmv_faixa ? PARAM.mcmv[linha.mcmv_faixa].tetoImovel : PARAM.tetoSFH;
   if (valorImovel > teto){
     valorImovel = teto;
-    VF = Math.min(VF, valorImovel * cota, E > 0 ? Math.max(valorImovel - E, 0) : valorImovel * cota);
+    VF = Math.min(VF, valorImovel * cota, E > valorImovel * (1 - cota) ? Math.max(valorImovel - E, 0) : valorImovel * cota);
   }
   const entradaNecessaria = Math.max(valorImovel - VF, 0);
+  const entradaFaltante = Math.max(0, entradaNecessaria - E);
+  const imovelEntradaAtual = E > 0 ? Math.min(E / (1 - cota), valorImovel) : 0; // o que a entrada de hoje já cobre
   const dfi = PARAM.dfi * valorImovel;
   const encargos = mip * VF + dfi + PARAM.tarifaMensal;
   let parcela1, ultimaParcela;
@@ -538,7 +539,7 @@ function calcModoImovel(linha, d){
     ultimaParcela = parcela1;
   }
   return { linha, prazoMeses, prazoLimitadoIdade: prazoMeses < d.prazoMeses,
-    financiado: VF, valorImovelMax: valorImovel, entradaNecessaria, entradaInsuf: false,
+    financiado: VF, valorImovelMax: valorImovel, entradaNecessaria, entradaFaltante, imovelEntradaAtual, entradaInsuf: false,
     parcela1, ultimaParcela, rendaMinima: d.renda, cabeNaRenda: true, seguros: mip*VF + dfi };
 }
 
@@ -758,6 +759,7 @@ function simular(auto){
   const melhor = resultados[0];
 
   // sintetiza campos para custos e relatório conforme o objetivo
+  d.entradaDisponivel = d.entrada; // o que o cliente tem hoje (recursos próprios + FGTS)
   if (melhor && d.modo === 'imovel'){
     d.valorImovel = melhor.valorImovelMax;
     d.entrada = melhor.entradaNecessaria;
@@ -775,6 +777,7 @@ function simular(auto){
       correcao:r.linha.correcao, obs:r.linha.obs,
       prazoMeses:r.prazoMeses, financiado:r.financiado, parcela1:r.parcela1, ultimaParcela:r.ultimaParcela,
       valorImovelMax:r.valorImovelMax, entradaNecessaria:r.entradaNecessaria,
+      entradaFaltante:r.entradaFaltante, imovelEntradaAtual:r.imovelEntradaAtual,
       rendaMinima:r.rendaMinima, cabeNaRenda:r.cabeNaRenda })) };
   ULTIMA.curadoria = curadoria(d, ULTIMA.resultados, custos);
   desenharResultado(d, resultados, melhor, custos, bancoRow, !!auto);
@@ -789,7 +792,7 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto){
   }
   const m = melhor, lm = m.linha;
   const programa = lm.mcmv_faixa ? 'Minha Casa Minha Vida · Faixa ' + lm.mcmv_faixa.slice(1)
-                 : lm.procotista ? 'Pró-Cotista FGTS' : (d.sfi ? 'SFI (estimativa)' : 'SBPE · ' + lm.linha.replace('SBPE','').trim() || 'SBPE');
+                 : lm.procotista ? 'Pró-Cotista FGTS' : (d.sfi ? 'SFI (estimativa)' : lm.linha);
   const avisos = [];
   if (d.sfi) avisos.push(`Imóvel acima do teto do SFH (${fmtBRL(PARAM.tetoSFH)}): a operação é SFI, com taxas livremente negociadas e sem uso de FGTS. Os valores abaixo são estimativa pelo padrão SBPE; a taxa final depende de negociação direta com o banco.`);
   if (d.modo === 'completa' && m.entradaInsuf) avisos.push(`A entrada informada (${fmtBRL(d.entradaPropria + d.valorFgts)}) é menor que o mínimo da linha (${fmtBRL(m.entradaNecessaria)}, cota de ${lm.cota_max}%). O cálculo considerou o financiamento máximo permitido.`);
@@ -801,7 +804,7 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto){
     hero = `
     <div class="item"><small>Imóvel de até</small><b>${fmtBRL(m.valorImovelMax)}</b><span>${programa} · ${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a.</span></div>
     <div class="item"><small>Parcela no limite dos 30%</small><b>${fmtBRL2(m.parcela1)}</b><span>renda informada: ${fmtBRL(d.renda)}</span></div>
-    <div class="item"><small>Entrada necessária</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.entrada>0?'disponível: '+fmtBRL(d.entradaPropria + d.valorFgts):'pode incluir FGTS e, no MCMV 1-2, subsídio'}</span></div>
+    <div class="item"><small>Entrada necessária</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.entradaDisponivel>0 ? (m.entradaFaltante>1 ? 'disponível: '+fmtBRL(d.entradaDisponivel)+' · faltam '+fmtBRL(m.entradaFaltante) : 'a entrada disponível cobre') : 'pode incluir FGTS e, no MCMV 1-2, subsídio'}</span></div>
     <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · ${d.sistema}</span></div>`;
   } else if (d.modo === 'renda'){
     hero = `
@@ -1055,8 +1058,13 @@ function curadoria(d, resultados, custos){
   // Leitura do objetivo
   if (d.modo === 'imovel'){
     add('ok','Leitura do cenário', `Com renda de ${fmtBRL(d.renda)} e o teto de 30% de comprometimento (parcela de até ${fmtBRL(d.renda*PARAM.comprometimento)}), o melhor caminho é ${melhor.instituicao} · ${melhor.linha}: imóvel de até ${fmtBRL(melhor.valorImovelMax)} em ${anos} anos no ${d.sistema}, financiando ${fmtBRL(melhor.financiado)} com entrada de ${fmtBRL(melhor.entradaNecessaria)}.`);
-    if (!d.entrada || d.entrada <= 0)
-      add('dica','Entrada a construir', `O cliente não informou entrada disponível. A entrada de ${fmtBRL(melhor.entradaNecessaria)} pode vir de FGTS próprio e dos demais proponentes${String(melhor.linha).includes('MCMV')?', do subsídio do programa (até R$ 55 mil nas Faixas 1 e 2)':''} ou de permuta negociada com o vendedor. Quanto maior a entrada informada, maior o imóvel alcançável.`);
+    const disp = d.entradaDisponivel || 0;
+    if (disp <= 0)
+      add('dica','Entrada a construir', `O cliente não informou entrada disponível. A entrada de ${fmtBRL(melhor.entradaNecessaria)} pode vir de FGTS próprio e dos demais proponentes${String(melhor.linha).includes('MCMV')?', do subsídio do programa (até R$ 55 mil nas Faixas 1 e 2)':''} ou de permuta negociada com o vendedor.`);
+    else if (melhor.entradaFaltante > 1)
+      add('atencao','Entrada a completar', `A entrada disponível hoje (${fmtBRL(disp)}) cobre uma compra imediata de até ${fmtBRL(melhor.imovelEntradaAtual)}. Para alcançar o teto que a renda permite (${fmtBRL(melhor.valorImovelMax)}), faltam ${fmtBRL(melhor.entradaFaltante)} de entrada, que podem vir de FGTS acumulado dos proponentes${String(melhor.linha).includes('MCMV')?', do subsídio do MCMV (até R$ 55 mil nas Faixas 1 e 2)':''}, de poupança programada ou de permuta com o vendedor.`);
+    else
+      add('ok','Entrada resolvida', `A entrada disponível (${fmtBRL(disp)}) cobre com folga o mínimo exigido (${fmtBRL(melhor.entradaNecessaria)}), o que reduz o risco da operação e fortalece a negociação de taxa.`);
   } else if (d.modo === 'renda'){
     add('ok','Leitura do cenário', `Para o imóvel de ${fmtBRL(d.valorImovel)}, a porta de entrada mais leve é ${melhor.instituicao} · ${melhor.linha}: entrada mínima de ${fmtBRL(melhor.entradaNecessaria)}${d.valorFgts>0?` (o FGTS de ${fmtBRL(d.valorFgts)} já abate parte)`:''} e renda familiar a partir de ${fmtBRL(melhor.rendaMinima)} para a parcela de ${fmtBRL2(melhor.parcela1)} em ${anos} anos no ${d.sistema}.`);
     if (d.renda > 0 && melhor.cabeNaRenda === false)
