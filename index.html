@@ -195,6 +195,14 @@
   <div class="card">
     <h2>Nova simulação <span class="gold serif">consultiva</span></h2>
     <div class="sub">Preencha os dados do cliente e do imóvel. A plataforma enquadra automaticamente no programa mais vantajoso e compara todas as instituições.</div>
+    <div class="grid g2" style="margin-bottom:14px">
+      <div><label>Objetivo da simulação</label><select id="fModo" onchange="uiModo()">
+        <option value="completa">Simulação completa · imóvel + entrada + renda</option>
+        <option value="imovel">Quanto de imóvel consigo com a minha renda?</option>
+        <option value="renda">Qual renda e entrada preciso para um imóvel?</option>
+      </select></div>
+      <div><label>Banco de relacionamento do cliente</label><select id="fBancoRel"><option value="">Nenhum / não informado</option><option>Caixa</option><option>BB</option><option>Itaú</option><option>Bradesco</option><option>Santander</option><option>Inter</option><option>Sicredi</option></select></div>
+    </div>
     <div class="grid g3" style="margin-bottom:14px">
       <div><label>Nome completo do cliente</label><input id="fCliente" placeholder="Nome e sobrenome"></div>
       <div><label>Telefone (WhatsApp)</label><input id="fContato" inputmode="tel" placeholder="+55 (67) 99999-9999"></div>
@@ -207,10 +215,10 @@
       <div><label>Quantos dependentes?</label><input id="fDependentes" type="number" min="0" value="0"></div>
     </div>
     <div class="grid g4" style="margin-bottom:14px">
-      <div><label>Valor do imóvel (R$)</label><input id="fImovel" type="text" inputmode="numeric" placeholder="500.000"></div>
-      <div><label>Entrada (R$)</label><input id="fEntrada" type="text" inputmode="numeric" placeholder="100.000"></div>
-      <div><label>Renda familiar bruta mensal (R$)</label><input id="fRenda" type="text" inputmode="numeric" placeholder="12.000"></div>
-      <div><label>Prazo desejado (anos)</label><input id="fPrazo" type="number" value="35" min="2" max="35"></div>
+      <div id="bImovel"><label id="lblImovel">Valor do imóvel (R$)</label><input id="fImovel" type="text" inputmode="numeric" placeholder="500.000"></div>
+      <div id="bEntrada"><label id="lblEntrada">Entrada (R$)</label><input id="fEntrada" type="text" inputmode="numeric" placeholder="100.000"></div>
+      <div id="bRenda"><label id="lblRenda">Renda bruta mensal (R$)</label><input id="fRenda" type="text" inputmode="numeric" placeholder="12.000"></div>
+      <div id="bPrazo"><label>Prazo desejado (anos)</label><input id="fPrazo" type="number" value="35" min="2" max="35"></div>
     </div>
     <div class="grid g4" style="margin-bottom:18px">
       <div><label>Sistema de amortização</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
@@ -308,6 +316,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_jDRPZgJmmSYV5M2JQE3kJw_jSH7EzBh"; // c
 /* Parâmetros locais (ajuste quando necessário) */
 const PARAM = {
   comprometimento: 0.30,     // 30% da renda bruta
+  trMensal: 0.0017,          // TR ~0,17% a.m. (última referência: jul/2026) — usada no fluxo de pagamento
+  trDataRef: 'jul/2026',
   tarifaMensal: 25,          // tarifa de administração (R$/mês)
   dfi: 0.00006,              // DFI ~0,006% a.m. sobre o valor do imóvel
   itbi: 0.02,                // ITBI Dourados-MS 2%
@@ -402,11 +412,30 @@ document.addEventListener('input', e => {
   if (id === 'fCpf'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf','cpfErro'); }
   if (id === 'fCpf2'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf2','cpfErro2'); }
   if (id === 'fContato') e.target.value = fmtFone(e.target.value);
+  if (e.target.closest && e.target.closest('#sec-sim')) agendarRecalc();
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'fNasc') el('idadeInfo').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
   if (e.target.id === 'fNasc2') el('idadeInfo2').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
+  if (e.target.closest && e.target.closest('#sec-sim') && e.target.type !== 'checkbox') agendarRecalc();
 });
+
+/* Recalcula automaticamente a cada alteração (com pequena pausa de digitação) */
+let recalcTimer = null;
+function agendarRecalc(){
+  clearTimeout(recalcTimer);
+  recalcTimer = setTimeout(() => {
+    const m = el('fModo').value;
+    const pronto = m === 'imovel' ? lerMoeda('fRenda') > 0 : lerMoeda('fImovel') >= 20000;
+    if (pronto) simular(true);
+  }, 700);
+}
+function uiModo(){
+  const m = el('fModo').value;
+  el('bImovel').style.display = m === 'imovel' ? 'none' : '';
+  el('lblEntrada').textContent = m === 'completa' ? 'Entrada (R$)' : 'Entrada disponível (R$, opcional)';
+  el('lblRenda').textContent = m === 'imovel' ? 'Renda bruta mensal (R$) · obrigatória' : m === 'renda' ? 'Renda bruta mensal (R$, opcional)' : 'Renda bruta mensal (R$)';
+}
 function uiComposta(){
   const sim = el('fComposta').value === 'sim';
   el('blocoComprador2').style.display = sim ? 'block' : 'none';
@@ -464,21 +493,81 @@ function calcular(linha, d){
 
 /* Enquadramento: quais linhas são elegíveis para este cliente */
 function linhasElegiveis(taxas, d){
+  const sfi = d.modo !== 'imovel' && d.valorImovel > PARAM.tetoSFH; // acima do teto: estimamos pelo padrão SBPE (SFI, taxas livres)
   return taxas.filter(t => {
     if (t.mcmv_faixa){
+      if (!d.renda) return false;
+      const faixaDaRenda = d.renda <= 3200 ? 'f1' : d.renda <= 5000 ? 'f2' : d.renda <= 9600 ? 'f3' : d.renda <= 13000 ? 'f4' : null;
+      if (t.mcmv_faixa !== faixaDaRenda) return false;
       const fx = PARAM.mcmv[t.mcmv_faixa];
-      if (!fx || !d.renda) return false;
-      if (d.renda > fx.rendaMax || d.valorImovel > fx.tetoImovel) return false;
-      // enquadra apenas na faixa correspondente à renda (a menor elegível)
-      const faixaDaRenda = d.renda <= 3200 ? 'f1' : d.renda <= 5000 ? 'f2' : d.renda <= 9600 ? 'f3' : 'f4';
-      return t.mcmv_faixa === faixaDaRenda;
+      if (d.modo !== 'imovel' && d.valorImovel > fx.tetoImovel) return false;
+      return true;
     }
     if (t.procotista && d.cotista !== 'sim') return false;
-    if (d.valorImovel > PARAM.tetoSFH) {
-      return false; // acima do teto SFH: operação SFI, sob consulta direta ao banco
-    }
+    if (sfi && (t.procotista || (t.linha||'').includes('Poupança'))) return false;
     return true;
   });
+}
+
+/* Modo "quanto de imóvel consigo": resolve o valor máximo a partir da renda */
+function calcModoImovel(linha, d){
+  const cota = (linha.cota_max||80)/100;
+  const prazoIdade = Math.floor((PARAM.idadeLimite - d.idade) * 12);
+  const prazoMeses = Math.min(d.prazoMeses, linha.prazo_max_meses||420, Math.max(prazoIdade,24));
+  const n = prazoMeses, i = iMensal(linha.taxa_aa), mip = taxaMIP(d.idade);
+  const pmax = d.renda * PARAM.comprometimento;
+  const fator = (d.sistema === 'SAC') ? (1/n + i + mip) : (i / (1 - Math.pow(1+i,-n)) + mip);
+  const E = d.entrada || 0; // entrada disponível (recursos próprios + FGTS)
+  let VF = Math.max(0, (pmax - PARAM.tarifaMensal) / (fator + PARAM.dfi));
+  if (E > 0) VF = Math.min(VF, E * cota / (1 - cota));
+  let valorImovel = VF + Math.max(E, VF * (1 - cota) / cota);
+  const teto = linha.mcmv_faixa ? PARAM.mcmv[linha.mcmv_faixa].tetoImovel : PARAM.tetoSFH;
+  if (valorImovel > teto){
+    valorImovel = teto;
+    VF = Math.min(VF, valorImovel * cota, E > 0 ? Math.max(valorImovel - E, 0) : valorImovel * cota);
+  }
+  const entradaNecessaria = Math.max(valorImovel - VF, 0);
+  const dfi = PARAM.dfi * valorImovel;
+  const encargos = mip * VF + dfi + PARAM.tarifaMensal;
+  let parcela1, ultimaParcela;
+  if (d.sistema === 'SAC'){
+    parcela1 = VF/n + VF*i + encargos;
+    ultimaParcela = VF/n + (VF/n)*i + encargos;
+  } else {
+    parcela1 = VF * i / (1 - Math.pow(1+i,-n)) + encargos;
+    ultimaParcela = parcela1;
+  }
+  return { linha, prazoMeses, prazoLimitadoIdade: prazoMeses < d.prazoMeses,
+    financiado: VF, valorImovelMax: valorImovel, entradaNecessaria, entradaInsuf: false,
+    parcela1, ultimaParcela, rendaMinima: d.renda, cabeNaRenda: true, seguros: mip*VF + dfi };
+}
+
+/* Fluxo de pagamento provável, com correção monetária (TR) sobre o saldo */
+function fluxoPagamento(linha, d, VF, valorImovel, prazoMeses){
+  if (!VF || VF <= 0) return null;
+  const i = iMensal(linha.taxa_aa);
+  const corr = (linha.correcao === 'fixa') ? 0 : PARAM.trMensal;
+  const n = prazoMeses;
+  const alvo = new Set([1,12,24,60,120,180,240,300,360,420].filter(m => m <= n)); alvo.add(n);
+  let saldo = VF, totalPago = 0, totalJuros = 0, totalSeguros = 0;
+  const marcos = [];
+  for (let m = 1; m <= n; m++){
+    saldo *= (1 + corr);
+    const rest = n - m + 1;
+    const juros = saldo * i;
+    let amort, pf;
+    if (d.sistema === 'SAC'){ amort = saldo / rest; pf = amort + juros; }
+    else { pf = saldo * i / (1 - Math.pow(1 + i, -rest)); amort = pf - juros; }
+    const idadeAtual = d.idade + Math.floor((m - 1) / 12);
+    const seguro = taxaMIP(idadeAtual) * saldo + PARAM.dfi * valorImovel + PARAM.tarifaMensal;
+    const parcela = pf + seguro;
+    saldo -= amort;
+    totalPago += parcela; totalJuros += juros; totalSeguros += seguro;
+    if (alvo.has(m)) marcos.push({ m, parcela, juros, amortizacao: amort, saldo: Math.max(saldo, 0) });
+  }
+  return { instituicao: linha.instituicao, nomeLinha: linha.linha, taxa_aa: linha.taxa_aa,
+    correcaoMensal: corr, sistema: d.sistema, prazoMeses: n, financiado: VF,
+    marcos, totalPago, totalJuros, totalSeguros };
 }
 
 /* Registro de Imóveis de Dourados-MS · Tabela de Emolumentos 2026 (Tabela III-C, valores totais)
@@ -600,7 +689,7 @@ function uiNav(s){
 let ULTIMA = null;
 let EDITANDO = null; // id da simulação em edição
 
-function simular(){
+function simular(auto){
   el('simErro').innerHTML = '';
   const usarFgts = el('fUsarFgts').value;
   const valorFgts = usarFgts === 'sim' ? lerMoeda('fFgts') : 0;
@@ -632,6 +721,9 @@ function simular(){
     usarFgts, valorFgts, entradaPropria,
     composta, perc1, perc2, c2, rendaPrincipal,
     corretor: PERFIL ? (PERFIL.nome || PERFIL.email) : '',
+    modo: el('fModo').value,
+    bancoRel: el('fBancoRel').value,
+    anexarFluxo: ULTIMA?.dados?.anexarFluxo || false,
     valorImovel: lerMoeda('fImovel'),
     entrada: entradaPropria + valorFgts,
     renda: rendaPrincipal + (c2 ? c2.renda : 0),
@@ -644,61 +736,144 @@ function simular(){
     idade: idadeDe(el('fNasc').value)
   };
   if (c2 && c2.idade !== null) d.idade = Math.max(d.idade, c2.idade); // regra do proponente mais velho
-  if (d.valorImovel < 20000){ el('simErro').innerHTML = '<div class="aviso erro">Informe o valor do imóvel.</div>'; return; }
+
+  // validação por objetivo
+  if (d.modo === 'imovel'){
+    if (!d.renda){ el('simErro').innerHTML = '<div class="aviso erro">Para descobrir quanto de imóvel o cliente consegue, informe a renda bruta mensal.</div>'; el('simResultado').style.display='none'; return; }
+  } else if (d.valorImovel < 20000){
+    if (!auto) el('simErro').innerHTML = '<div class="aviso erro">Informe o valor do imóvel.</div>';
+    el('simResultado').style.display='none'; return;
+  }
+  d.sfi = d.modo !== 'imovel' && d.valorImovel > PARAM.tetoSFH;
 
   const eleg = linhasElegiveis(TAXAS, d);
-  const resultados = eleg.map(t => calcular(t, d)).sort((a,b)=>a.parcela1-b.parcela1);
+  let resultados;
+  if (d.modo === 'imovel'){
+    resultados = eleg.map(t => calcModoImovel(t, d)).filter(r => r.financiado > 1000)
+      .sort((a,b) => b.valorImovelMax - a.valorImovelMax);
+  } else {
+    resultados = eleg.map(t => calcular(t, d))
+      .sort((a,b) => d.modo === 'renda' ? a.rendaMinima - b.rendaMinima : a.parcela1 - b.parcela1);
+  }
   const melhor = resultados[0];
+
+  // sintetiza campos para custos e relatório conforme o objetivo
+  if (melhor && d.modo === 'imovel'){
+    d.valorImovel = melhor.valorImovelMax;
+    d.entrada = melhor.entradaNecessaria;
+  }
+  if (melhor && d.modo === 'renda' && d.entrada < melhor.entradaNecessaria){
+    d.entrada = melhor.entradaNecessaria; // entrada mínima da melhor linha
+  }
+  const bancoRow = d.bancoRel ? resultados.find(r => r.linha.instituicao === d.bancoRel) : null;
   const custos = custosAquisicao(d, melhor ? melhor.financiado : 0);
-  ULTIMA = { dados:d, custos, resultados: resultados.map(r=>({
+  const linhaFluxo = bancoRow || melhor;
+  const fluxo = linhaFluxo ? fluxoPagamento(linhaFluxo.linha, d, linhaFluxo.financiado, d.valorImovel, linhaFluxo.prazoMeses) : null;
+
+  ULTIMA = { dados:d, custos, fluxo, resultados: resultados.map(r=>({
       instituicao:r.linha.instituicao, linha:r.linha.linha, taxa_aa:r.linha.taxa_aa,
       correcao:r.linha.correcao, obs:r.linha.obs,
       prazoMeses:r.prazoMeses, financiado:r.financiado, parcela1:r.parcela1, ultimaParcela:r.ultimaParcela,
+      valorImovelMax:r.valorImovelMax, entradaNecessaria:r.entradaNecessaria,
       rendaMinima:r.rendaMinima, cabeNaRenda:r.cabeNaRenda })) };
   ULTIMA.curadoria = curadoria(d, ULTIMA.resultados, custos);
-  desenharResultado(d, resultados, melhor, custos);
+  desenharResultado(d, resultados, melhor, custos, bancoRow, !!auto);
 }
 
-function desenharResultado(d, resultados, melhor, custos){
+function desenharResultado(d, resultados, melhor, custos, bancoRow, auto){
   const box = el('simResultado');
   if (!melhor){
     box.style.display='';
-    box.innerHTML = `<div class="card"><h2>Sem enquadramento automático</h2><div class="aviso erro">Nenhuma linha cadastrada atende a este perfil${d.valorImovel>PARAM.tetoSFH?' (imóvel acima do teto do SFH de '+fmtBRL(PARAM.tetoSFH)+'; operação SFI sob consulta ao banco)':''}. Ajuste os parâmetros ou consulte o administrador.</div></div>`;
+    box.innerHTML = `<div class="card"><h2>Sem enquadramento automático</h2><div class="aviso erro">Nenhuma linha cadastrada atende a este perfil com os dados informados. Ajuste os parâmetros (entrada, renda, prazo) ou consulte o administrador.</div></div>`;
     return;
   }
   const m = melhor, lm = m.linha;
   const programa = lm.mcmv_faixa ? 'Minha Casa Minha Vida · Faixa ' + lm.mcmv_faixa.slice(1)
-                 : lm.procotista ? 'Pró-Cotista FGTS' : 'SBPE · ' + lm.linha.replace('SBPE','').trim() || 'SBPE';
+                 : lm.procotista ? 'Pró-Cotista FGTS' : (d.sfi ? 'SFI (estimativa)' : 'SBPE · ' + lm.linha.replace('SBPE','').trim() || 'SBPE');
   const avisos = [];
-  if (m.entradaInsuf) avisos.push(`A entrada informada (${fmtBRL(d.entrada)}) é menor que o mínimo da linha (${fmtBRL(m.entradaNecessaria)}, cota de ${lm.cota_max}%). O cálculo considerou o financiamento máximo permitido.`);
-  if (m.prazoLimitadoIdade) avisos.push(`Pela idade do proponente (${d.idade} anos), o prazo foi ajustado para ${Math.round(m.prazoMeses/12)} anos (regra: idade + prazo até 80 anos e 6 meses).`);
-  if (m.cabeNaRenda === false) avisos.push(`Atenção: a renda informada (${fmtBRL(d.renda)}) está abaixo da renda mínima estimada (${fmtBRL(m.rendaMinima)}). Caminhos: compor renda com outro proponente, aumentar a entrada ou ampliar o prazo.`);
-  if (d.cotista==='nao') avisos.push('Sem 3 anos de FGTS, o cliente perde as taxas de cotista e o Pró-Cotista. Vale confirmar o histórico de carteira assinada.');
+  if (d.sfi) avisos.push(`Imóvel acima do teto do SFH (${fmtBRL(PARAM.tetoSFH)}): a operação é SFI, com taxas livremente negociadas e sem uso de FGTS. Os valores abaixo são estimativa pelo padrão SBPE; a taxa final depende de negociação direta com o banco.`);
+  if (d.modo === 'completa' && m.entradaInsuf) avisos.push(`A entrada informada (${fmtBRL(d.entradaPropria + d.valorFgts)}) é menor que o mínimo da linha (${fmtBRL(m.entradaNecessaria)}, cota de ${lm.cota_max}%). O cálculo considerou o financiamento máximo permitido.`);
+  if (m.prazoLimitadoIdade) avisos.push(`Pela idade do proponente mais velho (${d.idade} anos), o prazo foi ajustado para ${Math.round(m.prazoMeses/12)} anos (regra: idade + prazo até 80 anos e 6 meses).`);
 
-  box.style.display='';
-  box.innerHTML = `
-  <div class="resultado-hero">
+  // hero por objetivo
+  let hero;
+  if (d.modo === 'imovel'){
+    hero = `
+    <div class="item"><small>Imóvel de até</small><b>${fmtBRL(m.valorImovelMax)}</b><span>${programa} · ${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a.</span></div>
+    <div class="item"><small>Parcela no limite dos 30%</small><b>${fmtBRL2(m.parcela1)}</b><span>renda informada: ${fmtBRL(d.renda)}</span></div>
+    <div class="item"><small>Entrada necessária</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.entrada>0?'disponível: '+fmtBRL(d.entradaPropria + d.valorFgts):'pode incluir FGTS e, no MCMV 1-2, subsídio'}</span></div>
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · ${d.sistema}</span></div>`;
+  } else if (d.modo === 'renda'){
+    hero = `
+    <div class="item"><small>Renda mínima necessária</small><b>${fmtBRL(m.rendaMinima)}</b><span>${d.renda?'renda informada: '+fmtBRL(d.renda)+' · '+(m.cabeNaRenda?'aprovável':'insuficiente'):'regra dos 30%'}</span></div>
+    <div class="item"><small>Entrada mínima</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.valorFgts>0?'FGTS de '+fmtBRL(d.valorFgts)+' abate essa entrada':'recursos próprios + FGTS'}</span></div>
+    <div class="item"><small>1ª parcela (${d.sistema})</small><b>${fmtBRL2(m.parcela1)}</b><span>${programa} · ${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a.</span></div>
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · imóvel de ${fmtBRL(d.valorImovel)}</span></div>`;
+  } else {
+    hero = `
     <div class="item"><small>Melhor enquadramento</small><b>${programa}</b><span>${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a. + ${lm.correcao||'TR'}</span></div>
     <div class="item"><small>1ª parcela (${d.sistema})</small><b>${fmtBRL2(m.parcela1)}</b><span>inclui seguros e tarifa · última: ${fmtBRL2(m.ultimaParcela)}</span></div>
     <div class="item"><small>Renda mínima estimada</small><b>${fmtBRL(m.rendaMinima)}</b><span>${d.renda?'renda informada: '+fmtBRL(d.renda)+' · '+(m.cabeNaRenda?'aprovável':'insuficiente'):'regra dos 30%'}</span></div>
-    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · entrada ${fmtBRL(d.valorImovel-m.financiado)}</span></div>
-  </div>
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · entrada ${fmtBRL(d.valorImovel-m.financiado)}</span></div>`;
+  }
+
+  // destaque do banco de relacionamento
+  let cardBanco = '';
+  if (d.bancoRel){
+    if (!bancoRow){
+      cardBanco = `<div class="aviso">O banco de relacionamento (${d.bancoRel}) não tem linha elegível para este perfil no comparativo atual.</div>`;
+    } else if (bancoRow === m){
+      cardBanco = `<div class="aviso" style="border-color:var(--verde);background:#eef5f0"><b>${d.bancoRel}, o banco do relacionamento do cliente, já oferece a melhor condição do comparativo.</b> Excelente ponto de partida: use o relacionamento para negociar redução de tarifa, seguros e taxa final.</div>`;
+    } else {
+      const difP = bancoRow.parcela1 - m.parcela1;
+      cardBanco = `<div class="aviso"><b>Banco do relacionamento: ${d.bancoRel}</b> · ${bancoRow.linha.linha} · ${fmtPct(bancoRow.linha.taxa_aa)} a.a. · 1ª parcela ${fmtBRL2(bancoRow.parcela1)}${d.modo==='imovel'?` · imóvel de até ${fmtBRL(bancoRow.valorImovelMax)}`:` · renda mínima ${fmtBRL(bancoRow.rendaMinima)}`}.<br>A melhor condição geral é <b>${lm.instituicao} · ${lm.linha}</b> (${fmtPct(lm.taxa_aa)} a.a.), com parcela ${fmtBRL2(m.parcela1)}: diferença de <b>${fmtBRL2(Math.abs(difP))}/mês</b> (${fmtBRL(Math.abs(difP)*12)}/ano). Leve a proposta do concorrente ao gerente do ${d.bancoRel}: bancos costumam cobrir oferta para manter o cliente.</div>`;
+    }
+  }
+
+  // fluxo de pagamento
+  const fx = ULTIMA.fluxo;
+  const fluxoHTML = fx ? `
+    <details style="margin-top:16px;border:1px solid var(--cinza2);border-radius:8px;padding:12px 16px">
+      <summary style="cursor:pointer;font-weight:700;font-size:13.5px">Fluxo de pagamento provável · ${fx.instituicao} ${fx.nomeLinha} · ${fx.sistema} · correção ${fx.correcaoMensal>0?`TR de ${(fx.correcaoMensal*100).toFixed(2).replace('.',',')}% a.m. (ref. ${PARAM.trDataRef})`:'nenhuma (taxa fixa)'}</summary>
+      <div class="scroll-x" style="margin-top:10px"><table>
+        <thead><tr><th>Mês</th><th class="num">Parcela</th><th class="num">Juros</th><th class="num">Amortização</th><th class="num">Saldo devedor</th></tr></thead>
+        <tbody>${fx.marcos.map(k=>`<tr><td>${k.m===1?'1ª parcela':(k.m%12===0? (k.m/12)+'º ano':'mês '+k.m)}</td><td class="num">${fmtBRL2(k.parcela)}</td><td class="num">${fmtBRL2(k.juros)}</td><td class="num">${fmtBRL2(k.amortizacao)}</td><td class="num">${fmtBRL(k.saldo)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <div class="kv" style="margin-top:10px">
+        <div><small>Total pago estimado</small><b>${fmtBRL(fx.totalPago)}</b></div>
+        <div><small>Total de juros + correção</small><b>${fmtBRL(fx.totalJuros)}</b></div>
+        <div><small>Total de seguros e tarifas</small><b>${fmtBRL(fx.totalSeguros)}</b></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--texto)"><input type="checkbox" style="width:auto" ${d.anexarFluxo?'checked':''} onchange="ULTIMA.dados.anexarFluxo=this.checked"> Anexar este fluxo ao relatório PDF</label>
+    </details>` : '';
+
+  // colunas do comparativo por objetivo
+  const thExtra = d.modo === 'imovel' ? '<th class="num">Imóvel até</th><th class="num">Entrada nec.</th>' : d.modo === 'renda' ? '<th class="num">Entrada mín.</th>' : '';
+
+  box.style.display='';
+  box.innerHTML = `
+  <div class="resultado-hero">${hero}</div>
+  ${cardBanco}
   ${avisos.map(a=>`<div class="aviso">${a}</div>`).join('')}
   <div class="card">
     <div class="secao-titulo"><h3>Comparativo entre instituições</h3></div>
     <div class="scroll-x"><table>
-      <thead><tr><th>Instituição</th><th>Linha</th><th class="num">Taxa a.a.</th><th class="num">1ª parcela</th><th class="num">Renda mínima</th><th class="num">Prazo</th><th>Situação</th></tr></thead>
-      <tbody>${resultados.map((r,i)=>`
+      <thead><tr><th>Instituição</th><th>Linha</th><th class="num">Taxa a.a.</th>${thExtra}<th class="num">1ª parcela</th><th class="num">Renda mínima</th><th class="num">Prazo</th><th>Situação</th></tr></thead>
+      <tbody>${resultados.map((r,i)=>{
+        const ehRel = d.bancoRel && r.linha.instituicao === d.bancoRel;
+        const tdExtra = d.modo === 'imovel' ? `<td class="num"><b>${fmtBRL(r.valorImovelMax)}</b></td><td class="num">${fmtBRL(r.entradaNecessaria)}</td>` : d.modo === 'renda' ? `<td class="num">${fmtBRL(r.entradaNecessaria)}</td>` : '';
+        return `
         <tr class="${i===0?'melhor':''}">
-          <td><b>${r.linha.instituicao}</b></td><td>${r.linha.linha}${r.linha.obs?`<br><small style="color:var(--texto2)">${r.linha.obs}</small>`:''}</td>
-          <td class="num">${fmtPct(r.linha.taxa_aa)}</td>
+          <td><b>${r.linha.instituicao}</b>${ehRel?' <span class="tag gold">seu banco</span>':''}</td><td>${r.linha.linha}${r.linha.obs?`<br><small style="color:var(--texto2)">${r.linha.obs}</small>`:''}</td>
+          <td class="num">${fmtPct(r.linha.taxa_aa)}</td>${tdExtra}
           <td class="num"><b>${fmtBRL2(r.parcela1)}</b></td>
           <td class="num">${fmtBRL(r.rendaMinima)}</td>
           <td class="num">${Math.round(r.prazoMeses/12)} anos</td>
           <td>${r.cabeNaRenda===null?'<span class="tag cinza">sem renda</span>':r.cabeNaRenda?'<span class="tag ok">cabe na renda</span>':'<span class="tag no">renda insuficiente</span>'}</td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
       </tbody>
     </table></div>
+    ${fluxoHTML}
     <div class="secao-titulo"><h3>Custos de aquisição em Dourados-MS</h3></div>
     <div class="kv">
       <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi)}</b></div>
@@ -718,7 +893,7 @@ function desenharResultado(d, resultados, melhor, custos){
     </div>
     <div id="salvarMsg" class="msg"></div>
   </div>`;
-  box.scrollIntoView({behavior:'smooth'});
+  if (!auto) box.scrollIntoView({behavior:'smooth'});
 }
 
 async function salvarSimulacao(){
@@ -869,65 +1044,90 @@ async function salvarTaxa(id){
   Object.assign(t, novo); desenharTaxas();
 }
 
-/* ============================ CURADORIA MUDE ============================ */
+/* ============================ CURADORIA MUDE (contextual) ============================ */
 function curadoria(d, resultados, custos){
   const itens = [];
   const melhor = resultados[0];
   if (!melhor) return itens;
   const add = (tipo, rotulo, texto) => itens.push({tipo, rotulo, texto});
-  const entradaPct = d.valorImovel ? (d.valorImovel - melhor.financiado) / d.valorImovel : 0;
+  const anos = Math.round(melhor.prazoMeses/12);
 
-  // Comprometimento de renda
-  if (d.renda > 0){
+  // Leitura do objetivo
+  if (d.modo === 'imovel'){
+    add('ok','Leitura do cenário', `Com renda de ${fmtBRL(d.renda)} e o teto de 30% de comprometimento (parcela de até ${fmtBRL(d.renda*PARAM.comprometimento)}), o melhor caminho é ${melhor.instituicao} · ${melhor.linha}: imóvel de até ${fmtBRL(melhor.valorImovelMax)} em ${anos} anos no ${d.sistema}, financiando ${fmtBRL(melhor.financiado)} com entrada de ${fmtBRL(melhor.entradaNecessaria)}.`);
+    if (!d.entrada || d.entrada <= 0)
+      add('dica','Entrada a construir', `O cliente não informou entrada disponível. A entrada de ${fmtBRL(melhor.entradaNecessaria)} pode vir de FGTS próprio e dos demais proponentes${String(melhor.linha).includes('MCMV')?', do subsídio do programa (até R$ 55 mil nas Faixas 1 e 2)':''} ou de permuta negociada com o vendedor. Quanto maior a entrada informada, maior o imóvel alcançável.`);
+  } else if (d.modo === 'renda'){
+    add('ok','Leitura do cenário', `Para o imóvel de ${fmtBRL(d.valorImovel)}, a porta de entrada mais leve é ${melhor.instituicao} · ${melhor.linha}: entrada mínima de ${fmtBRL(melhor.entradaNecessaria)}${d.valorFgts>0?` (o FGTS de ${fmtBRL(d.valorFgts)} já abate parte)`:''} e renda familiar a partir de ${fmtBRL(melhor.rendaMinima)} para a parcela de ${fmtBRL2(melhor.parcela1)} em ${anos} anos no ${d.sistema}.`);
+    if (d.renda > 0 && melhor.cabeNaRenda === false)
+      add('atencao','Renda informada insuficiente', `A renda informada (${fmtBRL(d.renda)}) fica ${fmtBRL(melhor.rendaMinima - d.renda)} abaixo do necessário. Caminhos: ${d.composta!=='sim'?'compor renda com cônjuge ou familiar, ':''}${d.sistema==='SAC'?'simular no Price (parcela inicial menor), ':''}ampliar a entrada ou buscar um imóvel de menor valor.`);
+  } else if (d.renda > 0){
     const comp = melhor.parcela1 / d.renda;
-    if (comp <= 0.25) add('ok','Renda com folga', `A primeira parcela compromete ${(comp*100).toFixed(0)}% da renda informada, abaixo do teto de 30% dos bancos. Esse perfil costuma ter aprovação mais tranquila e abre espaço para negociar taxa.`);
-    else if (comp <= 0.30) add('ok','Renda dentro do limite', `A parcela compromete ${(comp*100).toFixed(0)}% da renda, dentro do teto de 30%. A aprovação é viável, mas sem folga: qualquer outra dívida em aberto (carro, cartão, consignado) pode reduzir o valor liberado pelo banco.`);
+    if (comp <= 0.25) add('ok','Renda com folga', `A primeira parcela compromete ${(comp*100).toFixed(0)}% da renda, abaixo do teto de 30%. Perfil com aprovação tranquila e espaço para negociar taxa.`);
+    else if (comp <= 0.30) add('ok','Renda dentro do limite', `A parcela compromete ${(comp*100).toFixed(0)}% da renda, dentro do teto de 30%, mas sem folga: outras dívidas em aberto (carro, cartão, consignado) podem reduzir o valor liberado pelo banco.`);
     else {
-      const rendaFalta = melhor.rendaMinima - d.renda;
-      const entradaExtra = Math.max(0, melhor.financiado - (d.renda * PARAM.comprometimento - (melhor.parcela1 - melhor.financiado/melhor.prazoMeses - melhor.financiado*iMensal(melhor.taxa_aa))) / (1/melhor.prazoMeses + iMensal(melhor.taxa_aa)));
-      add('atencao','Renda abaixo do necessário', `Faltam cerca de ${fmtBRL(rendaFalta)} de renda mensal para este cenário. Três caminhos práticos: compor renda com cônjuge ou familiar (os bancos aceitam até 3 e o Sicredi até 4 proponentes), aumentar a entrada (reduzindo o valor financiado em torno de ${fmtBRL(Math.min(entradaExtra, melhor.financiado*0.4))} a parcela cai para o limite) ou optar pelo sistema Price, que exige cerca de 25% menos renda que o SAC.`);
+      const caminhos = [];
+      if (d.composta !== 'sim') caminhos.push('compor renda com cônjuge ou familiar (bancos aceitam até 3 proponentes; Sicredi, 4)');
+      if (d.sistema === 'SAC') caminhos.push('simular no Price, que exige cerca de 25% menos renda que o SAC');
+      if (melhor.prazoMeses < 420 && !melhor.prazoLimitadoIdade) caminhos.push('ampliar o prazo');
+      caminhos.push('aumentar a entrada');
+      add('atencao','Renda abaixo do necessário', `Faltam cerca de ${fmtBRL(melhor.rendaMinima - d.renda)} de renda mensal para este cenário. Caminhos práticos: ${caminhos.join('; ')}.`);
     }
   } else {
-    add('dica','Informe a renda', 'Sem a renda familiar não é possível avaliar o enquadramento. Colete esse dado com o cliente para uma leitura completa.');
+    add('dica','Informe a renda', 'Sem a renda familiar não é possível avaliar o enquadramento completo. Colete esse dado com o cliente.');
   }
+
+  // Sistema de amortização (contextual)
+  if (d.sistema === 'PRICE')
+    add('dica','Sistema Price escolhido', `No Price a parcela nasce menor e estável, o que ajuda na aprovação; em compensação, o total de juros ao fim dos ${anos} anos é maior que no SAC. Se a renda tiver folga, vale comparar o SAC, em que a parcela começa maior e cai mês a mês.`);
+  else if (d.renda > 0 && melhor.cabeNaRenda !== false)
+    add('dica','Sistema SAC escolhido', `Boa escolha para quem cabe na renda: no SAC a parcela cai mês a mês (a última fica em torno de ${fmtBRL2(melhor.ultimaParcela)}) e o total de juros é o menor entre os sistemas.`);
 
   // Renda composta
   if (d.composta === 'sim' && d.c2)
-    add('ok','Renda composta', `Composição com ${d.c2.nome || 'o 2º comprador'}: renda considerada de ${fmtBRL(d.renda)} (${fmtBRL(d.rendaPrincipal||0)} + ${fmtBRL(d.c2.renda||0)}), com participação na compra de ${d.perc1}% e ${d.perc2}%. Os dois entram na análise de crédito, na escritura e devem apresentar a mesma documentação.`);
-
-  // Entrada
-  if (melhor.financiado < d.valorImovel - d.entrada + 1 && d.entrada < d.valorImovel*0.2)
-    add('atencao','Entrada abaixo do mínimo', `A entrada informada não alcança o mínimo da linha escolhida. O FGTS do cliente (e dos demais proponentes) pode compor a entrada, assim como um imóvel ou veículo dado em permuta negociada com o vendedor.`);
-  else if (entradaPct >= 0.3)
-    add('ok','Entrada forte', `Entrada de ${(entradaPct*100).toFixed(0)}% do valor do imóvel. Acima de 30%, o risco do banco cai e há margem real para negociar redução de taxa e isenção de tarifas.`);
+    add('ok','Renda composta', `Composição com ${d.c2.nome || 'o 2º comprador'}: renda considerada de ${fmtBRL(d.renda)} (${fmtBRL(d.rendaPrincipal||0)} + ${fmtBRL(d.c2.renda||0)}), participação de ${d.perc1}% e ${d.perc2}%. Os dois entram na análise de crédito, na escritura e apresentam a mesma documentação.`);
 
   // FGTS / cotista
   if (d.cotista === 'sim')
-    add('ok','Cotista do FGTS', 'Com 3+ anos de FGTS, o cliente acessa as melhores taxas (Pró-Cotista e condições de cotista no MCMV) e pode usar o saldo do fundo na entrada e nas amortizações a cada 2 anos.');
+    add('ok','Cotista do FGTS', `Com 3+ anos de carteira, o cliente acessa as melhores taxas (Pró-Cotista e condições de cotista no MCMV)${d.usarFgts==='sim'?' e o FGTS informado já compõe a entrada':' e pode usar o saldo do FGTS na entrada e nas amortizações a cada 2 anos'}.`);
   else
-    add('dica','Verificar FGTS', 'O cliente declarou não ter 3 anos de FGTS, mas vale conferir: os períodos somam mesmo em empregos diferentes e não precisam ser consecutivos. Se fechar 3 anos, as taxas caem de forma relevante.');
+    add('dica','Verificar FGTS', 'O cliente declarou não ter 3 anos de carteira, mas vale conferir: os períodos somam entre empregos diferentes e não precisam ser consecutivos. Fechando 3 anos, as taxas caem de forma relevante.');
 
   // Idade
-  if (melhor.prazoMeses < d.prazoMeses)
-    add('atencao','Prazo limitado pela idade', `Pela regra dos bancos (idade + prazo até 80 anos e 6 meses), o prazo foi ajustado para ${Math.round(melhor.prazoMeses/12)} anos, o que eleva a parcela. Incluir um proponente mais jovem na composição devolve o prazo cheio.`);
+  if (melhor.prazoLimitadoIdade)
+    add('atencao','Prazo limitado pela idade', `Pela regra dos bancos (idade + prazo até 80 anos e 6 meses), o prazo máximo para ${d.idade} anos é ${anos} anos, o que eleva a parcela${d.composta!=='sim'?'. Incluir um proponente mais jovem devolve o prazo cheio':''}.`);
+
+  // SFI
+  if (d.sfi)
+    add('atencao','Operação SFI', `Acima de ${fmtBRL(PARAM.tetoSFH)} o financiamento sai do SFH: taxas livremente negociadas, sem FGTS e sem o desconto de 50% no registro. Com entrada de ${fmtBRL(d.valorImovel - melhor.financiado)} sobre ${fmtBRL(d.valorImovel)}, o percentual financiado é baixo, o que dá força para negociar taxa próxima (ou melhor) que a do SBPE.`);
 
   // Oportunidade MCMV
-  if (d.renda > 0 && d.renda <= PARAM.mcmv.f4.rendaMax && !resultados.some(r=>String(r.linha||'').includes('MCMV'))){
-    const fx = d.renda <= PARAM.mcmv.f1.rendaMax ? PARAM.mcmv.f1 : d.renda <= PARAM.mcmv.f2.rendaMax ? PARAM.mcmv.f2 : d.renda <= PARAM.mcmv.f3.rendaMax ? PARAM.mcmv.f3 : PARAM.mcmv.f4;
+  if (!d.sfi && d.renda > 0 && d.renda <= PARAM.mcmv.f4.rendaMax && d.modo !== 'imovel' && !resultados.some(r=>String(r.linha||'').includes('MCMV'))){
+    const fx = d.renda <= 3200 ? PARAM.mcmv.f1 : d.renda <= 5000 ? PARAM.mcmv.f2 : d.renda <= 9600 ? PARAM.mcmv.f3 : PARAM.mcmv.f4;
     if (d.valorImovel > fx.tetoImovel)
-      add('dica','Perto do Minha Casa Minha Vida', `Pela renda, o cliente se enquadra no MCMV, mas o imóvel ultrapassa o teto da faixa (${fmtBRL(fx.tetoImovel)}). Se houver flexibilidade para um imóvel até esse valor, os juros caem bastante em relação ao SBPE.`);
+      add('dica','Perto do Minha Casa Minha Vida', `Pela renda, o cliente se enquadra no MCMV, mas o imóvel ultrapassa o teto da faixa (${fmtBRL(fx.tetoImovel)}). Havendo flexibilidade para um imóvel até esse valor, os juros caem bastante em relação ao SBPE.`);
+  }
+
+  // Banco de relacionamento
+  if (d.bancoRel){
+    const rel = resultados.find(r => r.instituicao === d.bancoRel);
+    if (rel && rel !== melhor && melhor.instituicao !== d.bancoRel){
+      const dif = rel.parcela1 - melhor.parcela1;
+      if (dif > 1) add('dica','Negocie com o banco do cliente', `O ${d.bancoRel} ficou ${fmtBRL2(dif)}/mês acima da melhor condição (${melhor.instituicao}). Apresente a proposta concorrente ao gerente: com o relacionamento existente, é comum o banco cobrir a oferta, e o cliente mantém a conveniência de concentrar tudo onde já opera.`);
+    } else if (rel && melhor.instituicao === d.bancoRel){
+      add('ok','Relacionamento vale ouro', `O ${d.bancoRel} já lidera o comparativo para este perfil. Use o histórico do cliente no banco para buscar redução adicional de taxa, tarifa e seguros na negociação final.`);
+    }
   }
 
   // Comparação com a média do mercado
-  if (resultados.length > 1){
+  if (resultados.length > 1 && d.modo !== 'imovel'){
     const media = resultados.reduce((s,r)=>s+r.parcela1,0)/resultados.length;
     const econ = media - melhor.parcela1;
-    if (econ > 50) add('ok','Economia sobre a média', `A melhor condição encontrada (${melhor.instituicao} · ${melhor.linha}) fica ${fmtBRL(econ)} por mês abaixo da média das instituições comparadas: cerca de ${fmtBRL(econ*12)} por ano que ficam no bolso do cliente.`);
+    if (econ > 50) add('ok','Economia sobre a média', `A melhor condição (${melhor.instituicao} · ${melhor.linha}) fica ${fmtBRL(econ)}/mês abaixo da média das instituições comparadas: cerca de ${fmtBRL(econ*12)} por ano no bolso do cliente.`);
   }
 
-  // Dicas gerais de aprovação
-  add('dica','O que acelera a aprovação', 'Nome sem restrições (consultar antes de protocolar), renda comprovada compatível com o IR e os extratos, movimentação bancária organizada nos últimos 6 meses e relacionamento com o banco escolhido (conta-salário e débito automático reduzem a taxa). Autônomos: extratos de 6 meses, declaração de IR e notas fiscais fortalecem o dossiê.');
-  add('dica','O que costuma atrapalhar', 'Dívidas em atraso ou renegociações recentes, cartão estourado no limite, financiamentos em aberto que consomem margem, renda informal sem lastro documental e divergência entre o valor declarado no IR e a renda informada ao banco. Tudo isso tem solução com planejamento; a equipe Mude orienta caso a caso.');
+  // Dicas gerais (uma linha só, sem repetir o que já foi dito acima)
+  add('dica','O que acelera a aprovação', `Nome sem restrições, renda compatível com IR e extratos, movimentação bancária organizada nos últimos 6 meses${d.situacao==='Autônomo'||d.situacao==='MEI'?' e, no perfil autônomo/MEI, notas fiscais e declaração de renda reforçando o dossiê':''}. Dívidas em atraso, cartão no limite e renda sem lastro documental são os principais travamentos; tudo tem solução com planejamento, e a equipe Mude orienta caso a caso.`);
 
   return itens;
 }
@@ -959,6 +1159,9 @@ function editarSimulacao(id){
   el('fFgts').value = d.valorFgts ? Number(d.valorFgts).toLocaleString('pt-BR') : '';
   if (d.entradaPropria !== undefined) el('fEntrada').value = d.entradaPropria ? Number(d.entradaPropria).toLocaleString('pt-BR') : '';
   el('fSituacao').value = d.situacao||'';
+  el('fModo').value = d.modo||'completa';
+  el('fBancoRel').value = d.bancoRel||'';
+  uiModo();
   el('fComposta').value = d.composta||'nao';
   el('fPerc1').value = d.perc1||50;
   el('fNome2').value = d.c2?.nome||'';
@@ -1047,7 +1250,9 @@ function gerarRelatorio(sim, meta){
     </div>` : ''}
     <h2>Parâmetros da operação</h2>
     <div class="rel-grid">
-      <div><small>Valor do imóvel</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
+      <div><small>Objetivo da simulação</small><b>${({completa:'Simulação completa', imovel:'Quanto de imóvel a renda alcança', renda:'Renda e entrada necessárias'})[d.modo||'completa']}</b></div>
+      <div><small>Banco de relacionamento</small><b>${d.bancoRel||'—'}</b></div>
+      <div><small>Valor do imóvel${d.modo==='imovel'?' (máximo alcançável)':''}</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
       <div><small>Entrada em recursos próprios</small><b>${fmtBRL(d.entradaPropria ?? (d.valorImovel-(m.financiado||0)))}</b></div>
       <div><small>FGTS na entrada</small><b>${d.usarFgts==='sim'?fmtBRL(d.valorFgts||0):'—'}</b></div>
       <div><small>Entrada total</small><b>${fmtBRL(d.valorImovel-(m.financiado||0))}</b></div>
@@ -1064,9 +1269,10 @@ function gerarRelatorio(sim, meta){
     </div>
     <h2>Comparativo entre instituições</h2>
     <table class="rel-tab">
-      <thead><tr><th>Instituição</th><th>Linha</th><th style="text-align:right">Taxa a.a.</th><th style="text-align:right">1ª parcela</th><th style="text-align:right">Renda mínima</th><th style="text-align:right">Prazo</th></tr></thead>
-      <tbody>${res.map(r=>`<tr><td><b>${r.instituicao}</b></td><td>${r.linha}</td><td style="text-align:right">${fmtPct(r.taxa_aa)}</td><td style="text-align:right">${fmtBRL2(r.parcela1)}</td><td style="text-align:right">${fmtBRL(r.rendaMinima)}</td><td style="text-align:right">${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Instituição</th><th>Linha</th><th style="text-align:right">Taxa a.a.</th>${d.modo==='imovel'?'<th style="text-align:right">Imóvel até</th><th style="text-align:right">Entrada nec.</th>':d.modo==='renda'?'<th style="text-align:right">Entrada mín.</th>':''}<th style="text-align:right">1ª parcela</th><th style="text-align:right">Renda mínima</th><th style="text-align:right">Prazo</th></tr></thead>
+      <tbody>${res.map(r=>`<tr><td><b>${r.instituicao}</b>${d.bancoRel===r.instituicao?' ★':''}</td><td>${r.linha}</td><td style="text-align:right">${fmtPct(r.taxa_aa)}</td>${d.modo==='imovel'?`<td style="text-align:right"><b>${fmtBRL(r.valorImovelMax||0)}</b></td><td style="text-align:right">${fmtBRL(r.entradaNecessaria||0)}</td>`:d.modo==='renda'?`<td style="text-align:right">${fmtBRL(r.entradaNecessaria||0)}</td>`:''}<td style="text-align:right">${fmtBRL2(r.parcela1)}</td><td style="text-align:right">${fmtBRL(r.rendaMinima)}</td><td style="text-align:right">${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
     </table>
+    ${d.bancoRel?`<p style="font-size:10.5px;color:#867e6e;margin:6px 0 0">★ banco de relacionamento do cliente.</p>`:''}
     <h2>Custos de aquisição estimados (Dourados-MS)</h2>
     <p style="font-size:11px;color:#867e6e;margin:0 0 10px">Registro conforme a Tabela de Emolumentos 2026 do Registro de Imóveis de MS (Lei Estadual 6.183/2023), somando o registro da compra e venda e o da alienação fiduciária do financiamento. ITBI de Dourados: 2%.</p>
     <div class="rel-grid">
@@ -1077,6 +1283,18 @@ function gerarRelatorio(sim, meta){
       <div><small>Total de despesas</small><b>${fmtBRL(custos.total||0)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-(m.financiado||0))+(custos.total||0))}</b></div>
     </div>
+    ${d.anexarFluxo && sim.fluxo ? `
+    <h2>Fluxo de pagamento provável</h2>
+    <p style="font-size:11px;color:#867e6e;margin:0 0 10px">${sim.fluxo.instituicao} · ${sim.fluxo.nomeLinha} · ${fmtPct(sim.fluxo.taxa_aa)} a.a. · sistema ${sim.fluxo.sistema} · ${sim.fluxo.correcaoMensal>0 ? 'correção pela TR de ' + (sim.fluxo.correcaoMensal*100).toFixed(2).replace('.',',') + '% a.m. (última referência: ' + PARAM.trDataRef + ')' : 'taxa fixa, sem correção do saldo'}. Projeção estimada; os valores reais variam com a TR de cada mês.</p>
+    <table class="rel-tab">
+      <thead><tr><th>Período</th><th style="text-align:right">Parcela</th><th style="text-align:right">Juros</th><th style="text-align:right">Amortização</th><th style="text-align:right">Saldo devedor</th></tr></thead>
+      <tbody>${sim.fluxo.marcos.map(k=>`<tr><td>${k.m===1?'1ª parcela':(k.m%12===0?(k.m/12)+'º ano':'mês '+k.m)}</td><td style="text-align:right">${fmtBRL2(k.parcela)}</td><td style="text-align:right">${fmtBRL2(k.juros)}</td><td style="text-align:right">${fmtBRL2(k.amortizacao)}</td><td style="text-align:right">${fmtBRL(k.saldo)}</td></tr>`).join('')}</tbody>
+    </table>
+    <div class="rel-grid" style="margin-top:10px">
+      <div><small>Total pago estimado</small><b>${fmtBRL(sim.fluxo.totalPago)}</b></div>
+      <div><small>Total de juros + correção</small><b>${fmtBRL(sim.fluxo.totalJuros)}</b></div>
+      <div><small>Total de seguros e tarifas</small><b>${fmtBRL(sim.fluxo.totalSeguros)}</b></div>
+    </div>` : ''}
     <h2>Curadoria Mude · leitura consultiva</h2>
     <div class="rel-cur">${cur.map(i=>`<p><span class="rot">${i.rotulo}.</span> ${i.texto}</p>`).join('')}</div>
     <h2>Documentos para a contratação (após aprovação da proposta)</h2>
