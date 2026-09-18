@@ -54,6 +54,16 @@ As senhas são gerenciadas pelo Supabase (criptografadas; o sistema nunca vê a 
 - **Robô de taxas:** roda sozinho toda segunda-feira às 8h (horário de MS) e, quando detectar número diferente nos sites monitorados, abre um alerta na aba **Issues** do repositório. Para receber por e-mail, clique em "Watch" no repositório. Para rodar na hora: aba Actions > "Verificar taxas dos bancos" > Run workflow. Após confirmar uma mudança e atualizar o painel, atualize também `data/taxas_referencia.json` para silenciar o alerta.
 - **Parâmetros locais** (ITBI, cartório, tetos do MCMV, tarifa): editáveis no bloco `PARAM` no topo do `index.html`.
 
+## Ficha do cliente (link público)
+
+O cliente preenche os próprios dados em `ficha.html` (mesmo endereço do simulador, trocando o final por `ficha.html`). A ficha chega na aba **Fichas de clientes** para toda a equipe aprovada, com aviso de quantas estão novas.
+
+- **Instalar (uma vez):** no Supabase, abra o SQL Editor, cole o conteúdo de `supabase/fichas.sql` e clique em "Run".
+- **Enviar ao cliente:** aba Fichas de clientes > "Copiar link" ou "Enviar pelo WhatsApp".
+- **Atender:** abra a ficha e clique em "Completar e simular". Os dados entram no formulário, o sistema indica o que conferir e calcula como sempre. Ao salvar a simulação, a ficha passa para "Simulada".
+- **Segurança:** o cliente só consegue gravar a ficha; não lê nada do sistema. Há limite de 3 envios por WhatsApp a cada 10 minutos e de 120 por hora no total, além de aceite da LGPD registrado na ficha.
+- **Cálculo:** a ficha apenas preenche o formulário. Nenhuma regra de enquadramento, renda mínima ou valor de imóvel foi alterada.
+
 ## Avisos importantes
 
 - Os sites dos bancos mudam de layout e podem bloquear robôs; o verificador é um apoio, não uma garantia. A palavra final sobre taxas é sempre do painel administrativo, alimentado por você.

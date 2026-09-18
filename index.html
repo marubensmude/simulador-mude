@@ -98,6 +98,10 @@
   .acoes-sim{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .form-inline{background:var(--cinza);border-radius:8px;padding:16px;margin:14px 0;display:none}
   #relatorio{background:#fff}
+  /* [FICHAS] ficha pública do cliente */
+  .badge{display:inline-block;min-width:18px;padding:1px 6px;border-radius:10px;background:var(--dourado);color:var(--preto);font-size:11px;font-weight:700;margin-left:6px;text-align:center}
+  .link-ficha{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .link-ficha input{flex:1;min-width:220px;font-size:13px}
   @media print{
     body>*{display:none!important}
     #relatorio{display:block!important}
@@ -183,6 +187,7 @@
   <div class="logo"><img class="logo-img mude-logo" alt="Mude Imóveis"><b>MUDE</b><span>Simulador</span></div>
   <nav>
     <button id="nav-sim" class="on" onclick="uiNav('sim')">Simulador</button>
+    <button id="nav-fichas" onclick="uiNav('fichas')">Fichas de clientes<span id="fichasBadge" class="badge" style="display:none"></span></button>
     <button id="nav-hist" onclick="uiNav('hist')">Minhas simulações</button>
     <button id="nav-adm" onclick="uiNav('adm')" style="display:none">Administração</button>
   </nav>
@@ -195,6 +200,7 @@
   <div class="card">
     <h2>Nova simulação <span class="gold serif">consultiva</span></h2>
     <div class="sub">Preencha os dados do cliente e do imóvel. A plataforma enquadra automaticamente no programa mais vantajoso e compara todas as instituições.</div>
+    <div id="fichaBanner"></div>
     <div class="grid g2" style="margin-bottom:14px">
       <div><label>Objetivo da simulação</label><select id="fModo" onchange="uiModo()">
         <option value="completa">Simulação completa · imóvel + entrada + renda</option>
@@ -252,6 +258,34 @@
     <div id="simErro"></div>
   </div>
   <div id="simResultado" style="display:none"></div>
+</section>
+
+<!-- ---------- [FICHAS] FICHAS DE CLIENTES ---------- -->
+<section id="sec-fichas" style="display:none">
+  <div class="card">
+    <h2>Fichas de <span class="gold serif">clientes</span></h2>
+    <div class="sub">Dados enviados pelos próprios clientes pelo link da Mude Imóveis. Clique em "Completar e simular" para carregar a ficha no simulador, conferir o que faltar e calcular normalmente.</div>
+    <label>Link para enviar ao cliente</label>
+    <div class="link-ficha">
+      <input id="linkFicha" readonly onclick="this.select()">
+      <button class="btn mini" onclick="copiarLinkFicha()">Copiar link</button>
+      <button class="btn mini ghost" onclick="whatsLinkFicha()">Enviar pelo WhatsApp</button>
+    </div>
+    <div id="linkMsg" class="msg" style="text-align:left"></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <h2 style="margin:0">Fichas recebidas</h2>
+      <div style="min-width:220px"><label>Mostrar</label><select id="fichasFiltro" onchange="carregarFichas()">
+        <option value="abertas">Abertas (novas e em atendimento)</option>
+        <option value="nova">Somente novas</option>
+        <option value="simulada">Já simuladas</option>
+        <option value="arquivada">Arquivadas</option>
+        <option value="todas">Todas</option>
+      </select></div>
+    </div>
+    <div id="fichasLista"></div>
+  </div>
 </section>
 
 <!-- ---------- HISTÓRICO ---------- -->
@@ -664,6 +698,7 @@ function entrarNoApp(){
   el('nav-adm').style.display = PERFIL.role === 'admin' ? '' : 'none';
   mostrar('telaApp');
   uiNav('sim');
+  contarFichas(); setInterval(contarFichas, 120000); // [FICHAS] aviso de fichas novas
 }
 
 /* ============================ AUTENTICAÇÃO ============================ */
@@ -694,17 +729,20 @@ async function sair(){ if (!DEMO) await sb.auth.signOut(); location.reload(); }
 
 /* ============================ NAVEGAÇÃO ============================ */
 function uiNav(s){
-  ['sim','hist','adm'].forEach(x=>{
+  ['sim','fichas','hist','adm'].forEach(x=>{
     el('sec-'+x).style.display = x===s ? '' : 'none';
     const b = el('nav-'+x); if (b) b.classList.toggle('on', x===s);
   });
   if (s==='hist') carregarHistorico();
+  if (s==='fichas') carregarFichas();
   if (s==='adm'){ carregarEquipe(); desenharTaxas(); }
 }
 
 /* ============================ SIMULAÇÃO ============================ */
 let ULTIMA = null;
 let EDITANDO = null; // id da simulação em edição
+let FICHA_ATUAL = null;  // [FICHAS] ficha de cliente carregada no formulário
+let ULTIMO_SALVO = null;
 
 function simular(auto){
   el('simErro').innerHTML = '';
@@ -969,8 +1007,11 @@ async function salvarSimulacao(){
   if (EDITANDO){
     ({ error } = await sb.from('simulacoes').update(registro).eq('id', EDITANDO));
   } else {
-    ({ error } = await sb.from('simulacoes').insert(registro));
+    let novo;
+    ({ data: novo, error } = await sb.from('simulacoes').insert(registro).select('id').single());
+    if (!error && novo) ULTIMO_SALVO = novo.id;
   }
+  if (!error) await fichaConcluida(EDITANDO || ULTIMO_SALVO); // [FICHAS]
   msg.textContent = error ? 'Erro ao salvar: ' + error.message : (EDITANDO ? 'Simulação atualizada no histórico.' : 'Simulação salva no histórico.');
   msg.className = 'msg ' + (error?'erro':'ok');
   if (!error) EDITANDO = null;
@@ -1036,6 +1077,158 @@ async function excluirSim(id){
   if (DEMO){ demoSims = demoSims.filter(s=>s.id!==id); carregarHistorico(); return; }
   const { error } = await sb.from('simulacoes').delete().eq('id', id);
   if (!error) carregarHistorico();
+}
+
+/* ============================ [FICHAS] FICHAS DE CLIENTES ============================
+   Recebe os dados enviados pelo cliente em ficha.html e os carrega no formulário.
+   Não altera nenhuma regra de cálculo: depois de carregada, a ficha segue o fluxo
+   normal do simulador (o corretor confere, completa e calcula). */
+let FICHAS = [];
+const escH = v => String(v ?? '').replace(/[&<>"'`]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]));
+const limpaTxt = v => String(v ?? '').replace(/[<>"'`\\]/g,'').trim();
+function urlFicha(){ return location.origin + location.pathname.replace(/[^/]*$/, '') + 'ficha.html'; }
+function copiarLinkFicha(){
+  const u = urlFicha(), m = el('linkMsg');
+  (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(
+    ()=>{ m.textContent='Link copiado.'; m.className='msg ok'; },
+    ()=>{ el('linkFicha').select(); m.textContent='Selecione e copie o link acima.'; m.className='msg erro'; });
+}
+function whatsLinkFicha(){
+  const t = `Olá! Para prepararmos a sua simulação de financiamento, preencha seus dados neste link seguro da Mude Imóveis. Leva poucos minutos e, assim que recebermos, montamos a comparação entre os bancos para você:\n${urlFicha()}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+}
+async function contarFichas(){
+  if (DEMO || !PERFIL) return;
+  const { count } = await sb.from('fichas').select('id', { count:'exact', head:true }).eq('status','nova');
+  const b = el('fichasBadge'); if (!b) return;
+  b.textContent = count || ''; b.style.display = count ? '' : 'none';
+}
+const STATUS_FICHA = { nova:['Nova','gold'], em_atendimento:['Em atendimento','cinza'], simulada:['Simulada','ok'], arquivada:['Arquivada','no'] };
+async function carregarFichas(){
+  el('linkFicha').value = urlFicha();
+  const lista = el('fichasLista');
+  if (DEMO){ lista.innerHTML = '<div class="aviso">As fichas de clientes funcionam com o Supabase configurado.</div>'; return; }
+  lista.innerHTML = '<div class="aviso">Carregando...</div>';
+  const f = el('fichasFiltro').value;
+  let q = sb.from('fichas').select('*').order('created_at',{ascending:false}).limit(200);
+  if (f === 'abertas') q = q.in('status',['nova','em_atendimento']); else if (f !== 'todas') q = q.eq('status', f);
+  const { data, error } = await q;
+  if (error){ lista.innerHTML = '<div class="aviso erro">Erro ao carregar: '+escH(error.message)+'. Confira se o arquivo supabase/fichas.sql foi executado.</div>'; return; }
+  FICHAS = data || [];
+  contarFichas();
+  if (!FICHAS.length){ lista.innerHTML = '<div class="aviso">Nenhuma ficha nesta situação. Envie o link acima para o cliente preencher.</div>'; return; }
+  const sn = v => v==='sim' ? 'Sim' : v==='nao' ? 'Não' : v==='nao_sei' ? 'Não sabe' : '';
+  const dt = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('pt-BR') + ' (' + idadeDe(iso) + ' anos)' : '';
+  lista.innerHTML = FICHAS.map(x=>{
+    const d = x.dados || {}, st = STATUS_FICHA[x.status] || [x.status,'cinza'];
+    const fone = String(x.cliente_contato||'').replace(/\D/g,'');
+    const kv = (rot,val) => val!=='' && val!=null ? `<div><small>${rot}</small><b>${escH(val)}</b></div>` : '';
+    return `<details class="simrow">
+      <summary>
+        <span><b>${escH(x.cliente_nome)}</b> · ${escH(x.cliente_contato)}</span>
+        <span><span class="tag ${st[1]}">${st[0]}</span>${x.atendida_por_nome?' <span style="color:var(--texto2)">com '+escH(x.atendida_por_nome)+'</span>':''}</span>
+        <span style="color:var(--texto2)">${new Date(x.created_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</span>
+      </summary>
+      <div class="corpo">
+        <div class="kv">
+          ${kv('CPF', d.cpf)}${kv('Nascimento', dt(d.nasc))}${kv('Estado civil', d.estadoCivil)}${kv('Dependentes', d.dependentes)}
+          ${kv('Situação profissional', d.situacao)}${kv('Renda bruta', d.rendaPrincipal ? fmtBRL(d.rendaPrincipal) : '')}
+          ${kv('Carteira +3 anos', sn(d.cotista))}${kv('Usar FGTS', sn(d.usarFgts))}${kv('Valor do FGTS', d.valorFgts ? fmtBRL(d.valorFgts) : '')}
+          ${kv('Imóvel em vista', sn(d.temImovel))}${kv('Valor do imóvel', d.valorImovel ? fmtBRL(d.valorImovel) : '')}${kv('Imóvel', d.condicao ? (d.condicao==='novo'?'Novo':'Usado') : '')}
+          ${kv('Entrada própria', d.entradaPropria ? fmtBRL(d.entradaPropria) : '')}${kv('Primeiro imóvel', sn(d.primeiro))}${kv('Banco principal', d.bancoRel)}
+          ${d.c2 ? kv('2º comprador', d.c2.nome) + kv('CPF (2º)', d.c2.cpf) + kv('Nascimento (2º)', dt(d.c2.nasc)) + kv('Estado civil (2º)', d.c2.estadoCivil) + kv('Situação (2º)', d.c2.situacao) + kv('Renda (2º)', d.c2.renda ? fmtBRL(d.c2.renda) : '') : ''}
+        </div>
+        ${d.obs ? `<div class="aviso"><b>Observação do cliente:</b> ${escH(d.obs)}</div>` : ''}
+        <div class="acoes-sim">
+          <button class="btn mini gold" onclick="abrirFicha(${x.id})">Completar e simular</button>
+          ${fone ? `<button class="btn mini ghost" onclick="window.open('https://wa.me/${fone}','_blank')">WhatsApp do cliente</button>` : ''}
+          ${x.status==='arquivada' ? `<button class="btn mini ghost" onclick="statusFicha(${x.id},'em_atendimento')">Reabrir</button>` : `<button class="btn mini ghost" onclick="statusFicha(${x.id},'arquivada')">Arquivar</button>`}
+          ${PERFIL.role==='admin' ? `<button class="btn mini ghost" onclick="excluirFicha(${x.id})">Excluir</button>` : ''}
+        </div>
+      </div>
+    </details>`;
+  }).join('');
+}
+async function statusFicha(id, status){
+  const { error } = await sb.from('fichas').update({ status }).eq('id', id);
+  if (error) alert('Não foi possível atualizar: ' + error.message);
+  carregarFichas();
+}
+async function excluirFicha(id){
+  if (!confirm('Excluir esta ficha definitivamente? Os dados do cliente serão apagados.')) return;
+  const { error } = await sb.from('fichas').delete().eq('id', id);
+  if (error) alert('Não foi possível excluir: ' + error.message);
+  carregarFichas();
+}
+function limparFormulario(){
+  ['fCliente','fContato','fNasc','fCpf','fImovel','fEntrada','fRenda','fFgts','fNome2','fCpf2','fNasc2','fRenda2'].forEach(i=>{ el(i).value=''; });
+  ['fBancoRel','fEstadoCivil','fSituacao','fEstadoCivil2','fSituacao2'].forEach(i=>{ el(i).value=''; });
+  el('fModo').value='completa'; el('fDependentes').value=0; el('fPrazo').value=35; el('fSistema').value='SAC';
+  el('fCondicao').value='novo'; el('fCotista').value='sim'; el('fPrimeiro').value='sim'; el('fUsarFgts').value='nao';
+  el('fComposta').value='nao'; el('fPerc1').value=50;
+  el('cpfErro').textContent=''; el('cpfErro2').textContent=''; el('idadeInfo').textContent=''; el('idadeInfo2').textContent='';
+  el('simErro').innerHTML=''; el('simResultado').style.display='none';
+  ULTIMA = null; EDITANDO = null; OFICIAIS = [];
+}
+async function abrirFicha(id){
+  const x = FICHAS.find(f=>f.id===id); if (!x) return;
+  if (x.status==='em_atendimento' && x.atendida_por && x.atendida_por!==PERFIL.id &&
+      !confirm(`Esta ficha já está em atendimento com ${x.atendida_por_nome||'outro corretor'}. Deseja assumir o atendimento?`)) return;
+  const d = x.dados || {}, br = v => v ? Number(v).toLocaleString('pt-BR') : '';
+  limparFormulario();
+  el('fCliente').value = limpaTxt(d.cliente || x.cliente_nome);
+  el('fContato').value = fmtFone(limpaTxt(d.contato || x.cliente_contato));
+  el('fCpf').value = limpaTxt(d.cpf); el('fNasc').value = limpaTxt(d.nasc);
+  el('fEstadoCivil').value = d.estadoCivil||''; el('fSituacao').value = d.situacao||'';
+  el('fDependentes').value = d.dependentes||0;
+  el('fRenda').value = br(d.rendaPrincipal);
+  el('fCotista').value = d.cotista==='nao' ? 'nao' : 'sim';
+  el('fUsarFgts').value = d.usarFgts==='sim' ? 'sim' : 'nao';
+  el('fFgts').value = br(d.valorFgts);
+  el('fImovel').value = br(d.valorImovel);
+  if (d.condicao) el('fCondicao').value = d.condicao;
+  el('fEntrada').value = br(d.entradaPropria);
+  el('fPrimeiro').value = d.primeiro==='nao' ? 'nao' : 'sim';
+  el('fBancoRel').value = d.bancoRel||'';
+  el('fModo').value = d.temImovel==='sim' && d.valorImovel ? 'completa' : 'imovel';
+  uiModo();
+  if (d.composta==='sim' && d.c2){
+    el('fComposta').value='sim';
+    el('fNome2').value = limpaTxt(d.c2.nome); el('fCpf2').value = limpaTxt(d.c2.cpf); el('fNasc2').value = limpaTxt(d.c2.nasc);
+    el('fEstadoCivil2').value = d.c2.estadoCivil||''; el('fSituacao2').value = d.c2.situacao||''; el('fRenda2').value = br(d.c2.renda);
+  }
+  uiComposta();
+  el('idadeInfo').textContent = el('fNasc').value ? idadeDe(el('fNasc').value) + ' anos' : '';
+  el('idadeInfo2').textContent = el('fNasc2').value ? idadeDe(el('fNasc2').value) + ' anos' : '';
+  checaCPF('fCpf','cpfErro'); if (d.c2) checaCPF('fCpf2','cpfErro2');
+
+  // o que o corretor precisa conferir antes de apresentar
+  const pend = [];
+  if (d.temImovel!=='sim') pend.push('o cliente ainda não tem imóvel em vista: o objetivo foi definido como "Quanto de imóvel consigo com a minha renda?"');
+  if (d.usarFgts==='nao_sei') pend.push('o cliente não sabe se vai usar FGTS: confirme antes de apresentar');
+  if (d.usarFgts==='sim' && !d.valorFgts) pend.push('o cliente vai usar FGTS, mas não informou o saldo');
+  if (d.temImovel==='sim' && !d.condicao) pend.push('confirme se o imóvel é novo ou usado');
+  if (d.composta==='sim') pend.push('ajuste o percentual de participação de cada comprador (padrão 50%)');
+  pend.push('prazo e sistema de amortização estão no padrão (35 anos, SAC)');
+
+  if (!DEMO && x.status !== 'simulada'){
+    const upd = { status:'em_atendimento', atendida_por: PERFIL.id, atendida_por_nome: PERFIL.nome || PERFIL.email, atendida_em: new Date().toISOString() };
+    await sb.from('fichas').update(upd).eq('id', id);
+    contarFichas();
+  }
+  FICHA_ATUAL = id;
+  uiNav('sim');
+  el('fichaBanner').innerHTML = `<div class="aviso"><b>Ficha de ${escH(x.cliente_nome)} carregada.</b> Confira e complete: ${pend.map(escH).join('; ')}.${d.obs?`<br><b>Observação do cliente:</b> ${escH(d.obs)}`:''}<br>Ao salvar a simulação, a ficha é marcada como simulada.</div>`;
+  if (el('fModo').value === 'imovel' ? lerMoeda('fRenda') > 0 : lerMoeda('fImovel') >= 20000) simular(true);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+async function fichaConcluida(simId){
+  if (!FICHA_ATUAL || DEMO) return;
+  const upd = { status:'simulada', atendida_por: PERFIL.id, atendida_por_nome: PERFIL.nome || PERFIL.email };
+  if (simId) upd.simulacao_id = simId;
+  await sb.from('fichas').update(upd).eq('id', FICHA_ATUAL);
+  FICHA_ATUAL = null; el('fichaBanner').innerHTML = '';
+  contarFichas();
 }
 
 /* ============================ ADMINISTRAÇÃO ============================ */
@@ -1195,6 +1388,7 @@ function curadoriaHTML(itens){
 /* ============================ EDITAR SIMULAÇÃO SALVA ============================ */
 function editarSimulacao(id){
   const s = SIMS.find(x=>x.id===id); if (!s) return;
+  FICHA_ATUAL = null; if (el('fichaBanner')) el('fichaBanner').innerHTML = ''; // [FICHAS]
   const d = s.dados?.dados || {};
   el('fCliente').value = s.cliente_nome==='(sem nome)'?'':(s.cliente_nome||'');
   el('fContato').value = s.cliente_contato||'';
