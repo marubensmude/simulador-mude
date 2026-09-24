@@ -370,7 +370,10 @@ const PARAM = {
   tarifaMensal: 25,          // tarifa de administração (R$/mês)
   dfi: 0.000066,             // DFI 0,0066% a.m. sobre o valor do imóvel (conferido em simulações oficiais da Caixa, set/2026)
   itbi: 0.02,                // ITBI Dourados-MS 2%
-  avaliacaoBanco: 3000,      // taxa média de avaliação do banco (R$)
+  avaliacaoBanco: 3000,      // estimativa de avaliação para bancos sem valor conferido (R$)
+  avaliacaoPorBanco: {       // tarifa de avaliação conferida em simulação oficial de cada banco
+    'Caixa': { valor: 841.44, fonte: 'valor conferido na Caixa em 23/09/2026' }
+  },
   idadeLimite: 80.5,         // idade + prazo <= 80 anos e 6 meses
   tetoSFH: 2250000,          // teto do SFH / uso do FGTS
   mcmv: {                    // tetos vigentes (Portaria MCID 333/2026)
@@ -669,13 +672,23 @@ function emolumentoRegistro(valor){
 }
 
 /* Custos de aquisição (Dourados-MS) */
-function custosAquisicao(d, financiado){
+/* Tarifa de avaliação: 1º a simulação oficial anexada (valor real do banco), 2º a tabela conferida por banco, 3º a estimativa média */
+function avaliacaoDoBanco(banco){
+  const of = OFICIAIS.find(o => o.det && o.det.avaliacao && (!banco || o.banco === banco)) || OFICIAIS.find(o => o.det && o.det.avaliacao);
+  if (of) return { valor: of.det.avaliacao, seguroVista: of.det.seguroVista || 0, banco: of.banco, fonte: 'simulação oficial ' + of.banco + (of.det.data ? ' de ' + of.det.data : '') };
+  const t = banco && PARAM.avaliacaoPorBanco[banco];
+  if (t) return { valor: t.valor, seguroVista: 0, banco, fonte: t.fonte };
+  return { valor: PARAM.avaliacaoBanco, seguroVista: 0, banco: banco || '', fonte: 'estimativa média' };
+}
+function custosAquisicao(d, financiado, banco){
   const itbi = d.valorImovel * PARAM.itbi;
   const fator = d.primeiro === 'sim' ? 0.5 : 1; // 50%: 1ª aquisição residencial pelo SFH (art. 290, Lei 6.015/73)
   const regCompra = emolumentoRegistro(d.valorImovel) * fator;
   const regFiduciaria = financiado > 0 ? emolumentoRegistro(financiado) * fator : 0;
   const cart = regCompra + regFiduciaria;
-  return { itbi, cartorio: cart, regCompra, regFiduciaria, avaliacao: PARAM.avaliacaoBanco, total: itbi + cart + PARAM.avaliacaoBanco };
+  const av = avaliacaoDoBanco(banco);
+  return { itbi, cartorio: cart, regCompra, regFiduciaria, avaliacao: av.valor, avaliacaoFonte: av.fonte, avaliacaoBanco: av.banco, seguroVista: av.seguroVista,
+    total: itbi + cart + av.valor + av.seguroVista };
 }
 </script>
 <script>
@@ -861,7 +874,8 @@ function simular(auto){
   const ofRef = OFICIAIS.find(o => o.det && o.det.jurosEfetivos);
   const linhaOf = ofRef ? { instituicao: ofRef.banco, linha: ofRef.det.linha || 'simulação oficial', taxa_aa: ofRef.det.jurosEfetivos, cota_max: ofRef.det.cota || 80, prazo_max_meses: 420, correcao: ofRef.det.indexador || 'TR', oficial: true } : null;
   const potencial = (d.modo !== 'imovel' && melhor) ? potencialCompra(d, linhaOf ? { linha: linhaOf } : refPot) : null;
-  const custos = custosAquisicao(d, melhor ? melhor.financiado : 0);
+  const bancoCustos = (bancoRow || melhor) ? (bancoRow || melhor).linha.instituicao : '';
+  const custos = custosAquisicao(d, melhor ? melhor.financiado : 0, bancoCustos);
   const linhaFluxo = bancoRow || melhor;
   const fluxo = linhaFluxo ? fluxoPagamento(linhaFluxo.linha, d, linhaFluxo.financiado, d.valorImovel, linhaFluxo.prazoMeses) : null;
 
@@ -1039,7 +1053,8 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
     <div class="kv">
       <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi)}</b></div>
       <div><small>Registro em cartório · tabela oficial 2026${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio)}</b></div>
-      <div><small>Avaliação do banco (média)</small><b>${fmtBRL(custos.avaliacao)}</b></div>
+      <div><small>Avaliação do imóvel (${custos.avaliacaoFonte||'estimativa média'})</small><b>${fmtBRL2(custos.avaliacao)}</b></div>
+      ${custos.seguroVista>0?`<div><small>Seguro à vista (${custos.avaliacaoFonte})</small><b>${fmtBRL2(custos.seguroVista)}</b></div>`:''}
       <div><small>Total de despesas estimadas</small><b>${fmtBRL(custos.total)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-m.financiado)+custos.total)}</b></div>
     </div>
@@ -1614,7 +1629,8 @@ function gerarRelatorio(sim, meta){
       <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi||0)}</b></div>
       <div><small>Registro em cartório${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio||0)}</b></div>
       ${custos.regCompra ? `<div><small>· sendo compra e venda</small><b>${fmtBRL(custos.regCompra)}</b></div><div><small>· sendo alienação fiduciária</small><b>${fmtBRL(custos.regFiduciaria||0)}</b></div>` : ''}
-      <div><small>Avaliação do banco</small><b>${fmtBRL(custos.avaliacao||0)}</b></div>
+      <div><small>Avaliação do imóvel${custos.avaliacaoFonte?' ('+custos.avaliacaoFonte+')':''}</small><b>${fmtBRL2(custos.avaliacao||0)}</b></div>
+      ${custos.seguroVista>0?`<div><small>Seguro à vista</small><b>${fmtBRL2(custos.seguroVista)}</b></div>`:''}
       <div><small>Total de despesas</small><b>${fmtBRL(custos.total||0)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-(m.financiado||0))+(custos.total||0))}</b></div>
     </div>
@@ -1844,6 +1860,7 @@ function extrairSimulacao(txt){
     dfi: g(new RegExp('DFI\\/DFC ' + R)),
     tarifa: g(new RegExp('Taxa de administra[çc][ãa]o ' + R)),
     avaliacao: g(new RegExp(R + ' Tarifa para avalia')),
+    seguroVista: g(new RegExp(R + ' Seguro [àa] vista')),
     encargo1: g(new RegExp('Encargo ' + R))
   };
   const iP = txt.indexOf('Prazo escolhido');
