@@ -61,6 +61,10 @@
   .potencial .pot-side b{display:block;color:#fff;font-size:15px;margin-bottom:6px}
   .potencial .pot-nota{grid-column:1/-1;background:#1b1b1b;color:#e8e2d0;font-size:12.5px;padding:10px 20px;border-top:1px solid #333}
   @media (max-width:640px){ .potencial{grid-template-columns:1fr} .potencial .pot-side{border-left:0;border-top:1px solid #333} }
+  .custos-edit .custo-input{width:100%;margin-top:4px;padding:6px 8px;font-size:14px;font-weight:700;border:1px solid var(--cinza2);border-radius:6px;background:#fff}
+  .custos-edit .editado{outline:2px solid #C9A227;outline-offset:-2px}
+  .custos-edit .custo-orig{display:block;font-size:11px;color:var(--texto2);margin-top:3px}
+  .custos-edit .tot b{font-size:15px}
   .reconc{border:1px solid var(--cinza2);border-radius:8px;padding:12px 14px;margin-top:12px}
   .reconc h4{margin:0 0 8px;font-size:13.5px}
   .reconc .div{color:var(--vermelho);font-weight:600}
@@ -472,7 +476,7 @@ function fmtFone(dig){
 document.addEventListener('input', e => {
   const id = e.target.id;
   if (['fImovel','fEntrada','fRenda','fFgts','fRenda2','ofFin'].includes(id)) mascaraMoeda(e.target);
-  if ((id||'').startsWith('of')) return; // campos do anexo de simulação oficial (inclusive o PDF) não recalculam
+  if ((id||'').startsWith('of') || (id||'').startsWith('cm_')) return; // anexo oficial e despesas editáveis não recalculam a cada tecla
   if (id === 'fCpf'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf','cpfErro'); }
   if (id === 'fCpf2'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf2','cpfErro2'); }
   if (id === 'fContato') e.target.value = fmtFone(e.target.value);
@@ -481,6 +485,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'fNasc') el('idadeInfo').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
   if (e.target.id === 'fNasc2') el('idadeInfo2').textContent = e.target.value ? idadeDe(e.target.value) + ' anos' : '';
+  if ((e.target.id||'').startsWith('cm_')){ aplicarCusto(e.target); return; } // despesa editada pelo corretor
   if ((e.target.id||'').startsWith('of')) return; // campos do anexo de simulação oficial não recalculam
   if (e.target.closest && e.target.closest('#sec-sim') && e.target.type !== 'checkbox') agendarRecalc();
 });
@@ -672,6 +677,21 @@ function emolumentoRegistro(valor){
 }
 
 /* Custos de aquisição (Dourados-MS) */
+/* Campo de despesa editável (ITBI, escritura + registro, avaliação) */
+function campoCusto(k, rotulo, c){
+  const v = (c[k] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `<div${c.editado?.[k] ? ' class="editado"' : ''}><small>${rotulo}</small>
+    <input id="cm_${k}" class="custo-input" type="text" inputmode="decimal" value="${v}">
+    ${c.editado?.[k] ? `<span class="custo-orig">calculado: ${fmtBRL2(c.calculado[k])} · <a href="#" onclick="restaurarCusto('${k}');return false">restaurar</a></span>` : ''}</div>`;
+}
+function aplicarCusto(inp){
+  const k = inp.id.replace('cm_', '');
+  const v = parseFloat(inp.value.replace(/[^\d,]/g, '').replace(',', '.'));
+  if (isNaN(v)) delete CUSTOS_MANUAL[k]; else CUSTOS_MANUAL[k] = Math.round(v * 100) / 100;
+  if (ULTIMA) simular(true);
+}
+function restaurarCusto(k){ delete CUSTOS_MANUAL[k]; if (ULTIMA) simular(true); }
+
 /* Tarifa de avaliação: 1º a simulação oficial anexada (valor real do banco), 2º a tabela conferida por banco, 3º a estimativa média */
 function avaliacaoDoBanco(banco){
   const of = OFICIAIS.find(o => o.det && o.det.avaliacao && (!banco || o.banco === banco)) || OFICIAIS.find(o => o.det && o.det.avaliacao);
@@ -687,8 +707,13 @@ function custosAquisicao(d, financiado, banco){
   const regFiduciaria = financiado > 0 ? emolumentoRegistro(financiado) * fator : 0;
   const cart = regCompra + regFiduciaria;
   const av = avaliacaoDoBanco(banco);
-  return { itbi, cartorio: cart, regCompra, regFiduciaria, avaliacao: av.valor, avaliacaoFonte: av.fonte, avaliacaoBanco: av.banco, seguroVista: av.seguroVista,
-    total: itbi + cart + av.valor + av.seguroVista };
+  const man = d.custosManual || {};
+  const c = { itbi, cartorio: cart, regCompra, regFiduciaria, avaliacao: av.valor, avaliacaoFonte: av.fonte, avaliacaoBanco: av.banco, seguroVista: av.seguroVista,
+    calculado: { itbi, cartorio: cart, avaliacao: av.valor }, editado: {} };
+  for (const k of ['itbi','cartorio','avaliacao']) if (typeof man[k] === 'number' && man[k] >= 0){ c[k] = man[k]; c.editado[k] = true; }
+  if (c.editado.avaliacao) c.avaliacaoFonte = 'valor informado';
+  c.total = c.itbi + c.cartorio + c.avaliacao + c.seguroVista;
+  return c;
 }
 </script>
 <script>
@@ -829,7 +854,8 @@ function simular(auto){
     cotista: el('fCotista').value,
     primeiro: el('fPrimeiro').value,
     nasc: el('fNasc').value,
-    idade: idadeDe(el('fNasc').value)
+    idade: idadeDe(el('fNasc').value),
+    custosManual: { ...CUSTOS_MANUAL }
   };
   if (c2 && c2.idade !== null) d.idade = Math.max(d.idade, c2.idade); // regra do proponente mais velho
 
@@ -1050,14 +1076,15 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
     ${fluxoHTML}
     ${oficiaisHTML}
     <div class="secao-titulo"><h3>Custos de aquisição em Dourados-MS</h3></div>
-    <div class="kv">
-      <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi)}</b></div>
-      <div><small>Registro em cartório · tabela oficial 2026${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio)}</b></div>
-      <div><small>Avaliação do imóvel (${custos.avaliacaoFonte||'estimativa média'})</small><b>${fmtBRL2(custos.avaliacao)}</b></div>
+    <div class="kv custos-edit">
+      ${campoCusto('itbi', 'ITBI' + (custos.editado?.itbi ? ' (valor informado)' : ' (' + (PARAM.itbi*100).toLocaleString('pt-BR') + '% do valor do imóvel)'), custos)}
+      ${campoCusto('cartorio', 'Escritura + registro' + (custos.editado?.cartorio ? ' (valor informado)' : d.primeiro==='sim' ? ' (tabela 2026, desconto de 50% do 1º imóvel SFH)' : ' (tabela oficial 2026)'), custos)}
+      ${campoCusto('avaliacao', 'Avaliação do banco (' + (custos.avaliacaoFonte||'estimativa média') + ')', custos)}
       ${custos.seguroVista>0?`<div><small>Seguro à vista (${custos.avaliacaoFonte})</small><b>${fmtBRL2(custos.seguroVista)}</b></div>`:''}
-      <div><small>Total de despesas estimadas</small><b>${fmtBRL(custos.total)}</b></div>
-      <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-m.financiado)+custos.total)}</b></div>
+      <div class="tot"><small>Total de despesas</small><b>${fmtBRL2(custos.total)}</b></div>
+      <div class="tot"><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL2((d.valorImovel-m.financiado)+custos.total)}</b></div>
     </div>
+    <div style="font-size:12px;color:var(--texto2);margin-top:6px">Os três primeiros valores são editáveis: digite o valor real (ex.: 841,44) e saia do campo para recalcular o total. "Restaurar" volta ao cálculo automático.</div>
     <div class="secao-titulo"><h3>Curadoria Mude · leitura consultiva</h3></div>
     ${curadoriaHTML(ULTIMA.curadoria)}
     <div class="parceria"><b>Acompanhamento Mude Imóveis.</b> A Mude Imóveis mantém parceria com correspondentes bancários credenciados de todos os principais bancos e acompanha o cliente em todas as etapas do financiamento: da simulação e organização dos documentos à análise de crédito, avaliação do imóvel e assinatura do contrato. <b>Mude que a Gente te Acompanha.</b></div>
@@ -1256,7 +1283,7 @@ function limparFormulario(){
   el('fComposta').value='nao'; el('fPerc1').value=50;
   el('cpfErro').textContent=''; el('cpfErro2').textContent=''; el('idadeInfo').textContent=''; el('idadeInfo2').textContent='';
   el('simErro').innerHTML=''; el('simResultado').style.display='none';
-  ULTIMA = null; EDITANDO = null; OFICIAIS = [];
+  ULTIMA = null; EDITANDO = null; OFICIAIS = []; CUSTOS_MANUAL = {};
 }
 async function abrirFicha(id){
   const x = FICHAS.find(f=>f.id===id); if (!x) return;
@@ -1511,6 +1538,7 @@ function editarSimulacao(id){
   el('idadeInfo').textContent = d.nasc ? idadeDe(d.nasc) + ' anos' : '';
   el('idadeInfo2').textContent = d.c2?.nasc ? idadeDe(d.c2.nasc) + ' anos' : '';
   OFICIAIS = (s.dados?.oficiais || []).slice();
+  CUSTOS_MANUAL = { ...(d.custosManual || {}) };
   EDITANDO = id;
   uiNav('sim');
   el('simErro').innerHTML = `<div class="aviso">Editando a simulação de <b>${s.cliente_nome}</b>. Recalcule e clique em "Atualizar simulação" para sobrescrever o registro salvo.</div>`;
@@ -1626,12 +1654,12 @@ function gerarRelatorio(sim, meta){
     <h2>Custos de aquisição estimados (Dourados-MS)</h2>
     <p style="font-size:11px;color:#867e6e;margin:0 0 10px">Registro conforme a Tabela de Emolumentos 2026 do Registro de Imóveis de MS (Lei Estadual 6.183/2023), somando o registro da compra e venda e o da alienação fiduciária do financiamento. ITBI de Dourados: 2%.</p>
     <div class="rel-grid">
-      <div><small>ITBI (${(PARAM.itbi*100).toLocaleString('pt-BR')}%)</small><b>${fmtBRL(custos.itbi||0)}</b></div>
-      <div><small>Registro em cartório${d.primeiro==='sim'?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL(custos.cartorio||0)}</b></div>
-      ${custos.regCompra ? `<div><small>· sendo compra e venda</small><b>${fmtBRL(custos.regCompra)}</b></div><div><small>· sendo alienação fiduciária</small><b>${fmtBRL(custos.regFiduciaria||0)}</b></div>` : ''}
-      <div><small>Avaliação do imóvel${custos.avaliacaoFonte?' ('+custos.avaliacaoFonte+')':''}</small><b>${fmtBRL2(custos.avaliacao||0)}</b></div>
+      <div><small>ITBI${custos.editado?.itbi?'':' ('+(PARAM.itbi*100).toLocaleString('pt-BR')+'%)'}</small><b>${fmtBRL2(custos.itbi||0)}</b></div>
+      <div><small>Escritura + registro${d.primeiro==='sim'&&!custos.editado?.cartorio?' (desconto de 50%, 1º imóvel SFH)':''}</small><b>${fmtBRL2(custos.cartorio||0)}</b></div>
+      ${custos.regCompra && !custos.editado?.cartorio ? `<div><small>· sendo compra e venda</small><b>${fmtBRL(custos.regCompra)}</b></div><div><small>· sendo alienação fiduciária</small><b>${fmtBRL(custos.regFiduciaria||0)}</b></div>` : ''}
+      <div><small>Avaliação do banco${custos.avaliacaoFonte && !custos.editado?.avaliacao?' ('+custos.avaliacaoFonte+')':''}</small><b>${fmtBRL2(custos.avaliacao||0)}</b></div>
       ${custos.seguroVista>0?`<div><small>Seguro à vista</small><b>${fmtBRL2(custos.seguroVista)}</b></div>`:''}
-      <div><small>Total de despesas</small><b>${fmtBRL(custos.total||0)}</b></div>
+      <div><small>Total de despesas</small><b>${fmtBRL2(custos.total||0)}</b></div>
       <div><small>Desembolso inicial (entrada + despesas)</small><b>${fmtBRL((d.valorImovel-(m.financiado||0))+(custos.total||0))}</b></div>
     </div>
     ${sim.procotista?.rows?.length ? `
@@ -1811,6 +1839,7 @@ function enviarWhatsSalva(id){
 
 /* ============================ SIMULAÇÕES OFICIAIS DOS BANCOS (PDF ANEXADO) ============================ */
 let OFICIAIS = [];
+let CUSTOS_MANUAL = {}; // valores de despesas digitados pelo corretor (itbi, cartorio, avaliacao)
 let OF_LIDO = null; // dados extraídos do último PDF selecionado
 
 const brNum = t => t == null ? null : parseFloat(String(t).replace(/\./g,'').replace(',','.'));
