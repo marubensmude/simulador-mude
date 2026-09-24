@@ -64,6 +64,14 @@ O cliente preenche os próprios dados em `ficha.html` (mesmo endereço do simula
 - **Segurança:** o cliente só consegue gravar a ficha; não lê nada do sistema. Há limite de 3 envios por WhatsApp a cada 10 minutos e de 120 por hora no total, além de aceite da LGPD registrado na ficha.
 - **Cálculo:** a ficha apenas preenche o formulário. Nenhuma regra de enquadramento, renda mínima ou valor de imóvel foi alterada.
 
+## Simulação oficial do banco e reconciliação (set/2026)
+
+- **Anexar:** no resultado, "Anexar simulação oficial do banco (PDF)". O sistema lê o PDF do simulador da Caixa e preenche sozinho taxa, prazo, parcela e financiado. De outros bancos, extrai o que encontrar; o restante é digitado.
+- **Reconciliação:** o sistema refaz o nosso cálculo com os mesmos parâmetros do banco e mostra, item a item (amortização, juros, MIP, DFI, tarifa, 1ª e última parcela), a diferença. Até 1% aparece o selo "Cálculo conferido". Logo abaixo, compara o que foi digitado no banco com o que foi digitado aqui (valor do imóvel, entrada, prazo, idade, taxa, renda) e aponta cada divergência. O quadro também sai no relatório PDF.
+- **Potencial de compra:** quando há renda informada, o resultado e o relatório destacam o maior imóvel que a renda alcança, com parcela no teto de 30%. Se houver simulação oficial anexada, usa exatamente os parâmetros dela; senão, a linha TR do banco de relacionamento (ou a melhor). Quando a entrada disponível limita o valor, o card avisa.
+- **Seguro MIP e DFI:** calibrados pelas simulações oficiais da Caixa (tabela `MIP_PONTOS` no `index.html`). Quando um PDF anexado revela uma taxa MIP diferente, o sistema mostra o novo ponto para incluir na tabela.
+- **Nova linha Caixa SBPE Balcão (11,49% a.a.):** instale uma vez no Supabase, em SQL Editor, com o arquivo `Instalação/2-caixa-sbpe-balcao.sql`, ou pelo botão "Atualizar taxas" do painel administrativo (a curadoria de 23/09/2026 já inclui a linha).
+
 ## Avisos importantes
 
 - Os sites dos bancos mudam de layout e podem bloquear robôs; o verificador é um apoio, não uma garantia. A palavra final sobre taxas é sempre do painel administrativo, alimentado por você.
