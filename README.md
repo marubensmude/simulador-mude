@@ -74,6 +74,10 @@ O cliente preenche os próprios dados em `ficha.html` (mesmo endereço do simula
 - **Despesas editáveis:** ITBI, escritura + registro e avaliação do banco podem ser digitados no resultado (ex.: 841,44); ao sair do campo o total e o desembolso inicial são recalculados. O valor editado fica destacado em dourado, mostra o valor calculado e tem o link "restaurar". Os valores editados são salvos com a simulação e voltam ao reabri-la.
 - **Nova linha Caixa SBPE Balcão (11,49% a.a.):** instale uma vez no Supabase, em SQL Editor, com o arquivo `Instalação/2-caixa-sbpe-balcao.sql`, ou pelo botão "Atualizar taxas" do painel administrativo (a curadoria de 23/09/2026 já inclui a linha).
 
+## Relatório PDF
+
+- Layout compacto: 3 páginas de relatório + 1 página de anexo (1ª página da simulação oficial do banco, com margens recortadas). Nenhuma seção é cortada ao meio, tanto na impressão ("Gerar PDF") quanto no PDF enviado pelo WhatsApp.
+
 ## Avisos importantes
 
 - Os sites dos bancos mudam de layout e podem bloquear robôs; o verificador é um apoio, não uma garantia. A palavra final sobre taxas é sempre do painel administrativo, alimentado por você.
