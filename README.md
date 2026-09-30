@@ -87,3 +87,13 @@ O cliente preenche os próprios dados em `ficha.html` (mesmo endereço do simula
 ---
 
 Mude Imóveis · Mude que a Gente te Acompanha.
+
+## Simulações oficiais dos bancos (SAC x Price)
+
+- No resultado, clique em "Anexar simulação oficial do banco (PDF)". Dá para selecionar vários PDFs de uma vez (por exemplo, o SAC e o Price da Caixa): os reconhecidos entram direto no comparativo.
+- A primeira simulação anexada vira a **base do cálculo**: prazo, sistema, valor do imóvel e entrada oficiais são assumidos no formulário, e o aviso do resultado lista o que foi ajustado. Para trocar a base, use "Usar como base" na linha da outra simulação.
+- Se você alterar algum campo depois (por exemplo, o prazo), o sistema recalcula pelo formulário e aponta a divergência em relação ao banco.
+- Com duas ou mais simulações, aparece o "Comparativo entre as simulações oficiais" (1ª e última parcela, renda necessária e total pago estimado), que também vai para o relatório PDF.
+- O prazo aceita fração de ano (ex.: 34,92 = 419 meses) e mostra o total em meses logo abaixo do campo.
+- No modo "Quanto de imóvel consigo com a minha renda?", o campo de valor do imóvel continua disponível como **valor pretendido** (opcional): o resultado mostra se ele cabe na renda e na entrada e o que falta.
+

@@ -264,10 +264,10 @@
       <div id="bImovel"><label id="lblImovel">Valor do imóvel (R$)</label><input id="fImovel" type="text" inputmode="numeric" placeholder="500.000"></div>
       <div id="bEntrada"><label id="lblEntrada">Entrada (R$)</label><input id="fEntrada" type="text" inputmode="numeric" placeholder="100.000"></div>
       <div id="bRenda"><label id="lblRenda">Renda bruta mensal (R$)</label><input id="fRenda" type="text" inputmode="numeric" placeholder="12.000"></div>
-      <div id="bPrazo"><label>Prazo desejado (anos)</label><input id="fPrazo" type="number" value="35" min="2" max="35"></div>
+      <div id="bPrazo"><label>Prazo (anos, aceita fração)</label><input id="fPrazo" type="number" value="35" min="1" max="35" step="any" oninput="infoPrazo()"><small id="prazoInfo" style="display:block;color:var(--texto2);margin-top:4px">420 meses</small></div>
     </div>
     <div class="grid g4" style="margin-bottom:18px">
-      <div><label>Sistema de amortização</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
+      <div><label>Sistema de amortização (cálculo)</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
       <div><label>Imóvel</label><select id="fCondicao"><option value="novo">Novo</option><option value="usado">Usado</option></select></div>
       <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
       <div><label>Primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
@@ -498,7 +498,7 @@ function fmtFone(dig){
 }
 document.addEventListener('input', e => {
   const id = e.target.id;
-  if (['fImovel','fEntrada','fRenda','fFgts','fRenda2','ofFin'].includes(id)) mascaraMoeda(e.target);
+  if (['fImovel','fEntrada','fRenda','fFgts','fRenda2','ofFin','ofImovel','ofEntrada'].includes(id)) mascaraMoeda(e.target);
   if ((id||'').startsWith('of') || (id||'').startsWith('cm_')) return; // anexo oficial e despesas editáveis não recalculam a cada tecla
   if (id === 'fCpf'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf','cpfErro'); }
   if (id === 'fCpf2'){ e.target.value = fmtCPF(e.target.value.replace(/\D/g,'')); checaCPF('fCpf2','cpfErro2'); }
@@ -525,7 +525,8 @@ function agendarRecalc(){
 }
 function uiModo(){
   const m = el('fModo').value;
-  el('bImovel').style.display = m === 'imovel' ? 'none' : '';
+  el('bImovel').style.display = '';
+  el('lblImovel').textContent = m === 'imovel' ? 'Valor do imóvel pretendido (R$, opcional)' : 'Valor do imóvel (R$)';
   el('lblEntrada').textContent = m === 'completa' ? 'Entrada (R$)' : 'Entrada disponível (R$, opcional)';
   el('lblRenda').textContent = m === 'imovel' ? 'Renda bruta mensal (R$) · obrigatória' : m === 'renda' ? 'Renda bruta mensal (R$, opcional)' : 'Renda bruta mensal (R$)';
 }
@@ -543,6 +544,21 @@ function uiPerc(){
 
 /* ============================ MOTOR DE CÁLCULO ============================ */
 const iMensal = aa => Math.pow(1 + aa/100, 1/12) - 1;
+/* Prazo em meses por extenso: 360 -> "30 anos"; 419 -> "34 anos e 11 meses" */
+function fmtPrazo(meses){
+  const m = Math.round(meses || 0), a = Math.floor(m / 12), r = m % 12;
+  if (!a) return r + (r === 1 ? ' mês' : ' meses');
+  return a + ' anos' + (r ? ' e ' + r + (r === 1 ? ' mês' : ' meses') : '');
+}
+function lerPrazoMeses(){
+  const v = parseFloat(String(el('fPrazo').value).replace(',', '.'));
+  return Math.min(420, Math.max(12, Math.round((v > 0 ? v : 35) * 12)));
+}
+function infoPrazo(){
+  const i = el('prazoInfo'); if (!i) return;
+  const v = parseFloat(String(el('fPrazo').value).replace(',', '.'));
+  i.textContent = v > 0 ? lerPrazoMeses() + ' meses' + (v > 35 ? ' · máximo de 35 anos' : '') : '';
+}
 
 function idadeDe(nascStr){
   if(!nascStr) return 35;
@@ -572,7 +588,7 @@ function componentesParcela(VF, valorImovel, taxa_aa, n, idade, sistema){
 /* Calcula a operação completa para uma linha de crédito */
 function calcular(linha, d){
   const cotaMax = (linha.cota_max||80)/100;
-  const prazoIdade = Math.floor((PARAM.idadeLimite - d.idade) * 12);
+  const prazoIdade = d.prazoOficial ? 9999 : Math.floor((PARAM.idadeLimite - d.idade) * 12); // prazo da simulação oficial: o banco já aplicou a regra da idade
   const prazoMeses = Math.min(d.prazoMeses, linha.prazo_max_meses||420, Math.max(prazoIdade,24));
   const financiado = Math.min(d.valorImovel - d.entrada, d.valorImovel * cotaMax);
   const entradaNecessaria = d.valorImovel - d.valorImovel * cotaMax;
@@ -627,7 +643,7 @@ function elegivelProCotista(d){
 /* Modo "quanto de imóvel consigo": resolve o valor máximo a partir da renda */
 function calcModoImovel(linha, d){
   const cota = (linha.cota_max||80)/100;
-  const prazoIdade = Math.floor((PARAM.idadeLimite - d.idade) * 12);
+  const prazoIdade = d.prazoOficial ? 9999 : Math.floor((PARAM.idadeLimite - d.idade) * 12); // prazo da simulação oficial: o banco já aplicou a regra da idade
   const prazoMeses = Math.min(d.prazoMeses, linha.prazo_max_meses||420, Math.max(prazoIdade,24));
   const n = prazoMeses, i = iMensal(linha.taxa_aa), mip = taxaMIP(d.idade);
   const pmax = d.renda * PARAM.comprometimento;
@@ -871,7 +887,7 @@ function simular(auto){
     valorImovel: lerMoeda('fImovel'),
     entrada: entradaPropria + valorFgts,
     renda: rendaPrincipal + (c2 ? c2.renda : 0),
-    prazoMeses: (parseInt(el('fPrazo').value)||35) * 12,
+    prazoMeses: lerPrazoMeses(),
     sistema: el('fSistema').value,
     condicao: el('fCondicao').value,
     cotista: el('fCotista').value,
@@ -881,6 +897,18 @@ function simular(auto){
     custosManual: { ...CUSTOS_MANUAL }
   };
   if (c2 && c2.idade !== null) d.idade = Math.max(d.idade, c2.idade); // regra do proponente mais velho
+  // simulação oficial usada como base: prazo igual ao do banco dispensa o corte por idade; divergências ficam registradas
+  const base = OFICIAIS.find(o => o.base);
+  if (base && base.det){
+    d.baseOficial = { banco: base.banco, sistema: base.det.sistema || '', prazoMeses: base.det.prazoMeses || null, valorImovel: base.det.valorImovel || null, entrada: base.det.entrada || null };
+    if (base.det.prazoMeses && base.det.prazoMeses === d.prazoMeses) d.prazoOficial = true;
+    d.ajustesOficiais = (base.ajustes || []).slice();
+    d.divergOficial = [];
+    const cmpD = (rot, vb, va, fmt) => { if (vb && va && Math.abs(vb - va) > Math.max(1, vb * 0.001)) d.divergOficial.push({ rot, banco: fmt(vb), aqui: fmt(va) }); };
+    cmpD('Prazo', base.det.prazoMeses, d.prazoMeses, fmtPrazo);
+    if (d.modo !== 'imovel') cmpD('Valor do imóvel', base.det.valorImovel, d.valorImovel, fmtBRL);
+    if (base.det.sistema && base.det.sistema !== d.sistema) d.divergOficial.push({ rot:'Sistema', banco: base.det.sistema, aqui: d.sistema });
+  }
 
   // validação por objetivo
   if (d.modo === 'imovel'){
@@ -909,6 +937,7 @@ function simular(auto){
 
   // sintetiza campos para custos e relatório conforme o objetivo
   d.entradaDisponivel = d.entrada; // o que o cliente tem hoje (recursos próprios + FGTS)
+  d.valorPretendido = d.modo === 'imovel' && d.valorImovel >= 20000 ? d.valorImovel : 0;
   if (melhor && d.modo === 'imovel'){
     d.valorImovel = melhor.valorImovelMax;
     d.entrada = melhor.entradaNecessaria;
@@ -939,8 +968,74 @@ function simular(auto){
     oficiais: OFICIAIS,
     procotista: { elegivel: proCheck.ok, criterio: proCheck.criterio || '', motivo: proCheck.motivo || '', rows: resultadosPro.map(mapRow) },
     resultados: resultados.map(mapRow) };
+  ULTIMA.pretendido = (d.valorPretendido && melhor) ? avaliarPretendido(d, melhor) : null;
+  ULTIMA.sistemas = melhor ? compararSistemas(d, linhaFluxo || melhor) : null;
   ULTIMA.curadoria = curadoria(d, ULTIMA.resultados, custos);
   desenharResultado(d, resultados, melhor, custos, bancoRow, !!auto, resultadosPro, proCheck);
+}
+
+/* Modo "quanto consigo" com valor pretendido: confronta o imóvel que o cliente quer com o teto da renda */
+function avaliarPretendido(d, melhor){
+  const V = d.valorPretendido, E = d.entradaDisponivel || 0;
+  const r = calcular(melhor.linha, { ...d, valorImovel: V, entrada: Math.max(E, 0) });
+  const entradaFalta = Math.max(0, (V - r.financiado) - E);
+  const cabeRenda = d.renda > 0 && r.rendaMinima <= d.renda;
+  return { valor: V, instituicao: melhor.linha.instituicao, linha: melhor.linha.linha, taxa_aa: melhor.linha.taxa_aa,
+    financiado: r.financiado, entrada: V - r.financiado, entradaFalta, parcela1: r.parcela1, ultimaParcela: r.ultimaParcela,
+    rendaMinima: r.rendaMinima, prazoMeses: r.prazoMeses, cabeRenda, cabe: cabeRenda && entradaFalta < 1, maximo: melhor.valorImovelMax };
+}
+function pretendidoHTML(p, d){
+  if (!p) return '';
+  const falta = [];
+  if (!p.cabeRenda) falta.push(`renda de ${fmtBRL(p.rendaMinima)} (faltam ${fmtBRL(p.rendaMinima - d.renda)})`);
+  if (p.entradaFalta >= 1) falta.push(`mais ${fmtBRL(p.entradaFalta)} de entrada`);
+  return `<div class="card"><h2>Imóvel pretendido pelo cliente</h2>
+    <div class="kv">
+      <div><small>Valor pretendido</small><b>${fmtBRL(p.valor)}</b></div>
+      <div><small>Teto pela renda</small><b>${fmtBRL(p.maximo)}</b></div>
+      <div><small>Entrada necessária</small><b>${fmtBRL(p.entrada)}</b></div>
+      <div><small>1ª parcela (${d.sistema})</small><b>${fmtBRL2(p.parcela1)}</b></div>
+      <div><small>Renda necessária (30%)</small><b>${fmtBRL(p.rendaMinima)}</b></div>
+      <div><small>Prazo</small><b>${fmtPrazo(p.prazoMeses)}</b></div>
+    </div>
+    <div class="aviso" style="margin-top:10px${p.cabe ? ';border-color:var(--verde);background:#eef5f0' : ''}">${p.cabe
+      ? `<b>O imóvel pretendido cabe no perfil.</b> ${p.instituicao} · ${p.linha} · ${fmtPct(p.taxa_aa)} a.a., financiando ${fmtBRL(p.financiado)}.`
+      : `<b>O imóvel pretendido ainda não cabe no perfil.</b> Para ${fmtBRL(p.valor)} o cliente precisa de ${falta.join(' e ')}. Caminhos: compor renda, ampliar a entrada (FGTS, poupança, permuta)${d.sistema==='SAC'?', simular no Price':''} ou ajustar o valor do imóvel.`}</div>
+  </div>`;
+}
+
+/* SAC x Price na mesma linha e com os mesmos dados: 1ª e última parcela, renda necessária e total pago */
+function compararSistemas(d, ref){
+  if (!ref || !ref.linha) return null;
+  const V = d.valorImovel, out = {};
+  for (const sis of ['SAC','PRICE']){
+    const dd = { ...d, sistema: sis };
+    const r = d.modo === 'imovel' ? calcular(ref.linha, { ...dd, entrada: V - ref.financiado }) : calcular(ref.linha, dd);
+    const fx = fluxoPagamento(ref.linha, dd, r.financiado, V, r.prazoMeses);
+    out[sis] = { parcela1: r.parcela1, ultima: r.ultimaParcela, rendaMinima: r.rendaMinima, prazoMeses: r.prazoMeses, financiado: r.financiado, totalPago: fx ? fx.totalPago : null, totalJuros: fx ? fx.totalJuros : null };
+  }
+  out.instituicao = ref.linha.instituicao; out.linha = ref.linha.linha; out.taxa_aa = ref.linha.taxa_aa;
+  return out;
+}
+function sistemasHTML(c, d){
+  if (!c) return '';
+  const S = c.SAC, P = c.PRICE, cel = (v, f) => v == null ? '—' : f(v);
+  const difParc = S.parcela1 - P.parcela1, difTotal = (P.totalPago||0) - (S.totalPago||0);
+  const lin = (rot, a, b, f) => `<tr><td>${rot}</td><td class="num"${d.sistema==='SAC'?' style="font-weight:700"':''}>${cel(a,f)}</td><td class="num"${d.sistema==='PRICE'?' style="font-weight:700"':''}>${cel(b,f)}</td></tr>`;
+  return `<details style="margin-top:16px;border:1px solid var(--cinza2);border-radius:8px;padding:12px 16px">
+    <summary style="cursor:pointer;font-weight:700;font-size:13.5px">SAC x Price · ${c.instituicao} ${c.linha} · ${fmtPct(c.taxa_aa)} a.a. · mesmos dados (o sistema do cálculo principal é ${d.sistema})</summary>
+    <div class="scroll-x" style="margin-top:10px"><table>
+      <thead><tr><th></th><th class="num">SAC</th><th class="num">Price</th></tr></thead>
+      <tbody>
+        ${lin('1ª parcela', S.parcela1, P.parcela1, fmtBRL2)}
+        ${lin('Última parcela', S.ultima, P.ultima, fmtBRL2)}
+        ${lin('Renda necessária (30%)', S.rendaMinima, P.rendaMinima, fmtBRL)}
+        ${lin('Prazo', S.prazoMeses, P.prazoMeses, fmtPrazo)}
+        ${lin('Total pago estimado', S.totalPago, P.totalPago, fmtBRL)}
+        ${lin('Juros + correção (estim.)', S.totalJuros, P.totalJuros, fmtBRL)}
+      </tbody></table></div>
+    <div style="font-size:12.5px;color:var(--texto2);margin-top:8px">No Price a 1ª parcela fica ${fmtBRL2(Math.abs(difParc))} ${difParc>=0?'menor':'maior'} e a renda exigida cai para ${fmtBRL(P.rendaMinima)}; em compensação, o total pago estimado é ${fmtBRL(Math.abs(difTotal))} ${difTotal>=0?'maior':'menor'} que no SAC. Totais projetados com a TR de referência.</div>
+  </details>`;
 }
 
 /* Potencial de compra: com a mesma linha de crédito e a parcela no teto de 30% da renda,
@@ -969,7 +1064,7 @@ function potencialHTML(p, d){
   const limitaEntrada = p.entradaDisponivel > 0 && p.tetoPelaEntrada < p.valorImovel;
   return `<div class="potencial">
     <div class="pot-main"><small>Potencial de compra com a renda informada</small><b>Imóvel de até ${fmtBRL(p.valorImovel)}</b>
-      <span>${p.oficial ? 'Parâmetros da simulação oficial · ' : ''}${p.instituicao} · ${p.linha} · ${fmtPct(p.taxa_aa)} a.a. · ${d.sistema} · ${Math.round(p.prazoMeses/12)} anos · 1ª parcela ${fmtBRL2(p.parcela1)} (${(p.percRenda*100).toFixed(1).replace('.',',')}% da renda)</span></div>
+      <span>${p.oficial ? 'Parâmetros da simulação oficial · ' : ''}${p.instituicao} · ${p.linha} · ${fmtPct(p.taxa_aa)} a.a. · ${d.sistema} · ${fmtPrazo(p.prazoMeses)} · 1ª parcela ${fmtBRL2(p.parcela1)} (${(p.percRenda*100).toFixed(1).replace('.',',')}% da renda)</span></div>
     <div class="pot-side">
       <div><small>Simulado hoje</small><b>${fmtBRL(d.valorImovel)}</b></div>
       <div><small>Entrada necessária (${100-p.cota}%)</small><b>${fmtBRL(p.entrada)}</b></div>
@@ -994,7 +1089,12 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
   const avisos = [];
   if (d.sfi) avisos.push(`Imóvel acima do teto do SFH (${fmtBRL(PARAM.tetoSFH)}): a operação é SFI, com taxas livremente negociadas e sem uso de FGTS. Os valores abaixo são estimativa pelo padrão SBPE; a taxa final depende de negociação direta com o banco.`);
   if (d.modo === 'completa' && m.entradaInsuf) avisos.push(`A entrada informada (${fmtBRL(d.entradaPropria + d.valorFgts)}) é menor que o mínimo da linha (${fmtBRL(m.entradaNecessaria)}, cota de ${lm.cota_max}%). O cálculo considerou o financiamento máximo permitido.`);
-  if (m.prazoLimitadoIdade) avisos.push(`Pela idade do proponente mais velho (${d.idade} anos), o prazo foi ajustado para ${Math.round(m.prazoMeses/12)} anos (regra: idade + prazo até 80 anos e 6 meses).`);
+  if (d.baseOficial){
+    const aj = (d.ajustesOficiais||[]).length ? ` Ajustes feitos no formulário: ${d.ajustesOficiais.map(a => a.rot + ' ' + a.antes + ' → ' + a.depois).join('; ')}.` : '';
+    const dv = (d.divergOficial||[]).length ? ` <b>Atenção:</b> o formulário hoje diverge da simulação oficial em ${d.divergOficial.map(x => x.rot.toLowerCase() + ' (banco: ' + x.banco + ' · aqui: ' + x.aqui + ')').join('; ')}; o cálculo segue o formulário.` : ' O cálculo está alinhado aos dados oficiais do banco.';
+    avisos.push(`<b>Base: simulação oficial ${d.baseOficial.banco}${d.baseOficial.sistema?' · '+d.baseOficial.sistema:''}.</b>${aj}${dv}`);
+  }
+  if (m.prazoLimitadoIdade) avisos.push(`Pela idade do proponente mais velho (${d.idade} anos), o prazo foi ajustado para ${fmtPrazo(m.prazoMeses)} (regra: idade + prazo até 80 anos e 6 meses).`);
 
   // hero por objetivo
   let hero;
@@ -1003,19 +1103,19 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
     <div class="item"><small>Imóvel de até</small><b>${fmtBRL(m.valorImovelMax)}</b><span>${programa} · ${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a.</span></div>
     <div class="item"><small>Parcela no limite dos 30%</small><b>${fmtBRL2(m.parcela1)}</b><span>renda informada: ${fmtBRL(d.renda)}</span></div>
     <div class="item"><small>Entrada necessária</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.entradaDisponivel>0 ? (m.entradaFaltante>1 ? 'disponível: '+fmtBRL(d.entradaDisponivel)+' · faltam '+fmtBRL(m.entradaFaltante) : 'a entrada disponível cobre') : 'pode incluir FGTS e, no MCMV 1-2, subsídio'}</span></div>
-    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · ${d.sistema}</span></div>`;
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${fmtPrazo(m.prazoMeses)} · ${d.sistema}</span></div>`;
   } else if (d.modo === 'renda'){
     hero = `
     <div class="item"><small>Renda necessária para a parcela (30%)</small><b>${fmtBRL(m.rendaMinima)}</b><span>${d.renda?'renda informada: '+fmtBRL(d.renda)+' · '+(m.cabeNaRenda?'aprovável':'insuficiente'):'regra dos 30%'}</span></div>
     <div class="item"><small>Entrada mínima</small><b>${fmtBRL(m.entradaNecessaria)}</b><span>${d.valorFgts>0?'FGTS de '+fmtBRL(d.valorFgts)+' abate essa entrada':'recursos próprios + FGTS'}</span></div>
     <div class="item"><small>1ª parcela (${d.sistema})</small><b>${fmtBRL2(m.parcela1)}</b><span>${programa} · ${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a.</span></div>
-    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · imóvel de ${fmtBRL(d.valorImovel)}</span></div>`;
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${fmtPrazo(m.prazoMeses)} · imóvel de ${fmtBRL(d.valorImovel)}</span></div>`;
   } else {
     hero = `
     <div class="item"><small>Melhor enquadramento</small><b>${programa}</b><span>${lm.instituicao} · ${fmtPct(lm.taxa_aa)} a.a. + ${lm.correcao||'TR'}</span></div>
     <div class="item"><small>1ª parcela (${d.sistema})</small><b>${fmtBRL2(m.parcela1)}</b><span>inclui seguros e tarifa · última: ${fmtBRL2(m.ultimaParcela)}</span></div>
     <div class="item"><small>Renda necessária para esta parcela</small><b>${fmtBRL(m.rendaMinima)}</b><span>${d.renda?'renda informada: '+fmtBRL(d.renda)+' · '+(m.cabeNaRenda?'margem de até '+fmtBRL(d.renda*PARAM.comprometimento)+'/mês':'insuficiente'):'regra dos 30%'}</span></div>
-    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${Math.round(m.prazoMeses/12)} anos · entrada ${fmtBRL(d.valorImovel-m.financiado)}</span></div>`;
+    <div class="item"><small>Valor financiado</small><b>${fmtBRL(m.financiado)}</b><span>${fmtPrazo(m.prazoMeses)} · entrada ${fmtBRL(d.valorImovel-m.financiado)}</span></div>`;
   }
 
   // destaque do banco de relacionamento
@@ -1041,7 +1141,7 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
     <div class="aviso" style="border-color:var(--vermelho);background:#fdf1ef"><b>Confirmar disponibilidade de recursos antes de apresentar ao cliente.</b> O Pró-Cotista depende do orçamento anual do FGTS, alocado por região, e os bancos ficam sem recursos com frequência. Elegibilidade atendida por: ${proCheck.criterio}.${econ>1?` Se houver recurso, a parcela cai ${fmtBRL2(econ)}/mês em relação à melhor condição acima (${fmtBRL(econ*12)}/ano).`:''}</div>
     <div class="scroll-x"><table>
       <thead><tr><th>Instituição</th><th>Linha</th><th class="num">Taxa a.a.</th>${d.modo==='imovel'?'<th class="num">Imóvel até</th>':''}<th class="num">1ª parcela</th><th class="num">Renda nec. (30%)</th><th class="num">Prazo</th></tr></thead>
-      <tbody>${resultadosPro.map(r=>`<tr><td><b>${r.linha.instituicao}</b></td><td>${r.linha.linha}${r.linha.obs?`<br><small style="color:var(--texto2)">${r.linha.obs}</small>`:''}</td><td class="num">${fmtPct(r.linha.taxa_aa)}</td>${d.modo==='imovel'?`<td class="num">${fmtBRL(r.valorImovelMax)}</td>`:''}<td class="num"><b>${fmtBRL2(r.parcela1)}</b></td><td class="num">${fmtBRL(r.rendaMinima)}</td><td class="num">${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
+      <tbody>${resultadosPro.map(r=>`<tr><td><b>${r.linha.instituicao}</b></td><td>${r.linha.linha}${r.linha.obs?`<br><small style="color:var(--texto2)">${r.linha.obs}</small>`:''}</td><td class="num">${fmtPct(r.linha.taxa_aa)}</td>${d.modo==='imovel'?`<td class="num">${fmtBRL(r.valorImovelMax)}</td>`:''}<td class="num"><b>${fmtBRL2(r.parcela1)}</b></td><td class="num">${fmtBRL(r.rendaMinima)}</td><td class="num">${fmtPrazo(r.prazoMeses)}</td></tr>`).join('')}</tbody>
     </table></div>`;
   } else if (proCheck && !proCheck.ok && d.cotista === 'sim'){
     proHTML = `<div class="secao-titulo"><h3>Pró-Cotista FGTS · linha condicionada</h3></div>
@@ -1072,9 +1172,11 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
   const thExtra = d.modo === 'imovel' ? '<th class="num">Imóvel até</th><th class="num">Entrada nec.</th>' : d.modo === 'renda' ? '<th class="num">Entrada mín.</th>' : '';
 
   box.style.display='';
+  const formOfAntigo = el('formOficial'); // preserva o anexo em andamento (PDF escolhido e campos) quando o resultado é recalculado
   box.innerHTML = `
   <div class="resultado-hero">${hero}</div>
   ${potencialHTML(ULTIMA.potencial, d)}
+  ${pretendidoHTML(ULTIMA.pretendido, d)}
   ${cardBanco}
   ${avisos.map(a=>`<div class="aviso">${a}</div>`).join('')}
   <div class="card">
@@ -1090,13 +1192,14 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
           <td class="num">${fmtPct(r.linha.taxa_aa)}</td>${tdExtra}
           <td class="num"><b>${fmtBRL2(r.parcela1)}</b></td>
           <td class="num">${fmtBRL(r.rendaMinima)}</td>
-          <td class="num">${Math.round(r.prazoMeses/12)} anos</td>
+          <td class="num">${fmtPrazo(r.prazoMeses)}</td>
           <td>${r.cabeNaRenda===null?'<span class="tag cinza">sem renda</span>':r.cabeNaRenda?'<span class="tag ok">cabe na renda</span>':'<span class="tag no">renda insuficiente</span>'}</td>
         </tr>`;}).join('')}
       </tbody>
     </table></div>
     ${proHTML}
     ${fluxoHTML}
+    ${sistemasHTML(ULTIMA.sistemas, d)}
     ${oficiaisHTML}
     <div class="secao-titulo"><h3>Custos de aquisição em Dourados-MS</h3></div>
     <div class="kv custos-edit">
@@ -1119,6 +1222,7 @@ function desenharResultado(d, resultados, melhor, custos, bancoRow, auto, result
     </div>
     <div id="salvarMsg" class="msg"></div>
   </div>`;
+  if (formOfAntigo && el('formOficial')){ el('formOficial').replaceWith(formOfAntigo); formOfAntigo.style.display = FORM_OF_ABERTO ? 'block' : 'none'; }
   if (!auto) box.scrollIntoView({behavior:'smooth'});
 }
 
@@ -1193,7 +1297,7 @@ async function carregarHistorico(){
           <div><small>Valor do imóvel</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
           <div><small>Entrada</small><b>${fmtBRL(d.entrada||0)}</b></div>
           <div><small>Renda familiar</small><b>${fmtBRL(d.renda||0)}</b></div>
-          <div><small>Sistema / prazo</small><b>${d.sistema||''} · ${Math.round((res.prazoMeses||d.prazoMeses||0)/12)} anos</b></div>
+          <div><small>Sistema / prazo</small><b>${d.sistema||''} · ${fmtPrazo((res.prazoMeses||d.prazoMeses||0))}</b></div>
           <div><small>Melhor linha</small><b>${res.instituicao||''} ${res.linha||''} (${res.taxa_aa?fmtPct(res.taxa_aa):''})</b></div>
           <div><small>1ª parcela</small><b>${res.parcela1?fmtBRL2(res.parcela1):''}</b></div>
           <div><small>Renda necessária (30%)</small><b>${res.rendaMinima?fmtBRL(res.rendaMinima):''}</b></div>
@@ -1301,7 +1405,7 @@ async function excluirFicha(id){
 function limparFormulario(){
   ['fCliente','fContato','fNasc','fCpf','fImovel','fEntrada','fRenda','fFgts','fNome2','fCpf2','fNasc2','fRenda2'].forEach(i=>{ el(i).value=''; });
   ['fBancoRel','fEstadoCivil','fSituacao','fEstadoCivil2','fSituacao2'].forEach(i=>{ el(i).value=''; });
-  el('fModo').value='completa'; el('fDependentes').value=0; el('fPrazo').value=35; el('fSistema').value='SAC';
+  el('fModo').value='completa'; el('fDependentes').value=0; el('fPrazo').value=35; infoPrazo(); el('fSistema').value='SAC'; uiModo(); FORM_OF_ABERTO = false; limparFormOficial();
   el('fCondicao').value='novo'; el('fCotista').value='sim'; el('fPrimeiro').value='sim'; el('fUsarFgts').value='nao';
   el('fComposta').value='nao'; el('fPerc1').value=50;
   el('cpfErro').textContent=''; el('cpfErro2').textContent=''; el('idadeInfo').textContent=''; el('idadeInfo2').textContent='';
@@ -1530,10 +1634,11 @@ function editarSimulacao(id){
   const d = s.dados?.dados || {};
   el('fCliente').value = s.cliente_nome==='(sem nome)'?'':(s.cliente_nome||'');
   el('fContato').value = s.cliente_contato||'';
-  el('fImovel').value = d.valorImovel ? Number(d.valorImovel).toLocaleString('pt-BR') : '';
+  const vImovel = d.modo === 'imovel' ? (d.valorPretendido || 0) : d.valorImovel; // no modo "quanto consigo" o valor salvo é o teto; o campo guarda o pretendido
+  el('fImovel').value = vImovel ? Number(vImovel).toLocaleString('pt-BR') : '';
   el('fEntrada').value = d.entrada ? Number(d.entrada).toLocaleString('pt-BR') : '';
   el('fRenda').value = (d.rendaPrincipal ?? d.renda) ? Number(d.rendaPrincipal ?? d.renda).toLocaleString('pt-BR') : '';
-  el('fPrazo').value = Math.round((d.prazoMeses||420)/12);
+  el('fPrazo').value = +((d.prazoMeses||420)/12).toFixed(2); infoPrazo();
   el('fSistema').value = d.sistema||'SAC';
   el('fCondicao').value = d.condicao||'novo';
   el('fCotista').value = d.cotista||'sim';
@@ -1561,6 +1666,7 @@ function editarSimulacao(id){
   el('idadeInfo').textContent = d.nasc ? idadeDe(d.nasc) + ' anos' : '';
   el('idadeInfo2').textContent = d.c2?.nasc ? idadeDe(d.c2.nasc) + ' anos' : '';
   OFICIAIS = (s.dados?.oficiais || []).slice();
+  FORM_OF_ABERTO = false; limparFormOficial();
   CUSTOS_MANUAL = { ...(d.custosManual || {}) };
   EDITANDO = id;
   uiNav('sim');
@@ -1652,8 +1758,9 @@ function gerarRelatorio(sim, meta){
         <div><small>Valor do imóvel${d.modo==='imovel'?' (máximo)':''}</small><b>${fmtBRL(d.valorImovel||0)} · ${d.condicao==='usado'?'usado':'novo'}</b></div>
         <div><small>Entrada informada</small><b>${fmtBRL(d.entradaPropria ?? entradaCalc)}${d.usarFgts==='sim'?' + FGTS '+fmtBRL(d.valorFgts||0):''}</b></div>
         <div><small>Entrada considerada</small><b>${fmtBRL(entradaCalc)}</b></div>
-        <div><small>Sistema · prazo</small><b>${d.sistema||'SAC'} · ${Math.round((m.prazoMeses||d.prazoMeses||0)/12)} anos</b></div>
+        <div><small>Sistema · prazo</small><b>${d.sistema||'SAC'} · ${fmtPrazo((m.prazoMeses||d.prazoMeses||0))}</b></div>
       </div>
+      ${d.baseOficial ? `<p class="rel-nota">Parâmetros alinhados à simulação oficial ${d.baseOficial.banco}${d.baseOficial.sistema?' ('+d.baseOficial.sistema+')':''}${(d.divergOficial||[]).length ? '. Divergências mantidas a pedido: ' + d.divergOficial.map(x => x.rot.toLowerCase() + ' no banco ' + x.banco + ', aqui ' + x.aqui).join('; ') : ''}.</p>` : ''}
       ${(d.entradaPropria ?? entradaCalc) + (d.usarFgts==='sim'?(d.valorFgts||0):0) < entradaCalc - 1 ? `<p class="rel-nota">A entrada informada é menor que o mínimo exigido pelo banco; o cálculo considerou a entrada mínima de ${fmtBRL(entradaCalc)}.</p>` : ''}
     </section>
     <section class="rel-sec">
@@ -1671,7 +1778,7 @@ function gerarRelatorio(sim, meta){
       <div class="rel-pot">
         <div class="pp"><small>Com a sua renda, você pode comprar um imóvel de até</small>
           <b>${fmtBRL(pot.valorImovel)}</b>
-          <span>${pot.instituicao} · ${pot.linha} · ${d.sistema||'SAC'} · ${Math.round(pot.prazoMeses/12)} anos · 1ª parcela ${fmtBRL2(pot.parcela1)} (${(pot.percRenda*100).toFixed(1).replace('.',',')}% da renda)</span></div>
+          <span>${pot.instituicao} · ${pot.linha} · ${d.sistema||'SAC'} · ${fmtPrazo(pot.prazoMeses)} · 1ª parcela ${fmtBRL2(pot.parcela1)} (${(pot.percRenda*100).toFixed(1).replace('.',',')}% da renda)</span></div>
         <div class="ps">
           <div><small>Imóvel simulado</small><b>${fmtBRL(d.valorImovel||0)}</b></div>
           <div><small>Entrada necessária</small><b>${fmtBRL(pot.entrada)}</b></div>
@@ -1696,7 +1803,7 @@ function gerarRelatorio(sim, meta){
       <h2>Comparativo entre instituições</h2>
       <table class="rel-tab">
         <thead><tr><th>Instituição · linha</th><th ${R}>Taxa a.a.</th>${d.modo==='imovel'?`<th ${R}>Imóvel até</th><th ${R}>Entrada</th>`:d.modo==='renda'?`<th ${R}>Entrada mín.</th>`:''}<th ${R}>1ª parcela</th><th ${R}>Renda nec.</th><th ${R}>Prazo</th></tr></thead>
-        <tbody>${res.map((r,i)=>`<tr${i===0?' class="top"':''}><td><b>${r.instituicao}</b>${d.bancoRel===r.instituicao?' ★':''} · ${r.linha}</td><td ${R}>${fmtPct(r.taxa_aa)}</td>${d.modo==='imovel'?`<td ${R}><b>${fmtBRL(r.valorImovelMax||0)}</b></td><td ${R}>${fmtBRL(r.entradaNecessaria||0)}</td>`:d.modo==='renda'?`<td ${R}>${fmtBRL(r.entradaNecessaria||0)}</td>`:''}<td ${R}>${fmtBRL2(r.parcela1)}</td><td ${R}>${fmtBRL(r.rendaMinima)}</td><td ${R}>${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
+        <tbody>${res.map((r,i)=>`<tr${i===0?' class="top"':''}><td><b>${r.instituicao}</b>${d.bancoRel===r.instituicao?' ★':''} · ${r.linha}</td><td ${R}>${fmtPct(r.taxa_aa)}</td>${d.modo==='imovel'?`<td ${R}><b>${fmtBRL(r.valorImovelMax||0)}</b></td><td ${R}>${fmtBRL(r.entradaNecessaria||0)}</td>`:d.modo==='renda'?`<td ${R}>${fmtBRL(r.entradaNecessaria||0)}</td>`:''}<td ${R}>${fmtBRL2(r.parcela1)}</td><td ${R}>${fmtBRL(r.rendaMinima)}</td><td ${R}>${fmtPrazo(r.prazoMeses)}</td></tr>`).join('')}</tbody>
       </table>
       <p class="rel-nota">Renda necessária: renda bruta mínima para a 1ª parcela caber em 30% da renda.${d.bancoRel?' ★ banco de relacionamento do cliente.':''}</p>
     </section>
@@ -1705,14 +1812,35 @@ function gerarRelatorio(sim, meta){
       <h2>Pró-Cotista FGTS · linha condicionada</h2>
       <table class="rel-tab">
         <thead><tr><th>Instituição · linha</th><th ${R}>Taxa a.a.</th><th ${R}>1ª parcela</th><th ${R}>Renda nec.</th><th ${R}>Prazo</th></tr></thead>
-        <tbody>${sim.procotista.rows.map(r=>`<tr><td><b>${r.instituicao}</b> · ${r.linha}</td><td ${R}>${fmtPct(r.taxa_aa)}</td><td ${R}>${fmtBRL2(r.parcela1)}</td><td ${R}>${fmtBRL(r.rendaMinima)}</td><td ${R}>${Math.round(r.prazoMeses/12)} anos</td></tr>`).join('')}</tbody>
+        <tbody>${sim.procotista.rows.map(r=>`<tr><td><b>${r.instituicao}</b> · ${r.linha}</td><td ${R}>${fmtPct(r.taxa_aa)}</td><td ${R}>${fmtBRL2(r.parcela1)}</td><td ${R}>${fmtBRL(r.rendaMinima)}</td><td ${R}>${fmtPrazo(r.prazoMeses)}</td></tr>`).join('')}</tbody>
       </table>
       <p class="rel-nota"><b>Sujeito a disponibilidade de recursos:</b> o Pró-Cotista depende do orçamento anual do FGTS e esgota com frequência; confirmar com o banco antes de contar com esta condição. Elegibilidade: ${sim.procotista.criterio}.</p>
+    </section>` : ''}
+    ${oficiais.length >= 2 ? (() => { const nums = oficiais.map(o => numerosOficial(o, d)); const lt = leituraSacPrice(nums); return `
+    <section class="rel-sec">
+      <h2>Comparativo das simulações oficiais</h2>
+      <table class="rel-tab">
+        <thead><tr><th></th>${nums.map(x => `<th ${R}>${x.banco} · ${x.sistema||'—'}</th>`).join('')}</tr></thead>
+        <tbody>${[['Taxa efetiva a.a.', 'taxa', fmtPct], ['Prazo', 'prazoMeses', fmtPrazo], ['Valor financiado', 'financiado', fmtBRL], ['1ª parcela', 'parcela1', fmtBRL2], ['Última parcela', 'ultima', fmtBRL2], ['Renda necessária (30%)', 'rendaMinima', fmtBRL], ['Total pago estimado', 'totalPago', fmtBRL]]
+          .map(([rot, k, f]) => `<tr${k==='parcela1'?' class="top"':''}><td>${rot}</td>${nums.map(x => `<td ${R}>${x[k]!=null?f(x[k]):'—'}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+      <p class="rel-nota">${lt ? lt + ' ' : ''}Total pago estimado com os parâmetros de cada simulação oficial e a TR de referência; valores reais variam com a TR.</p>
+    </section>`; })() : ''}
+    ${d.valorPretendido && sim.pretendido ? `
+    <section class="rel-sec">
+      <h2>Imóvel pretendido pelo cliente</h2>
+      <div class="rel-grid">
+        <div><small>Valor pretendido</small><b>${fmtBRL(sim.pretendido.valor)}</b></div>
+        <div><small>Entrada necessária</small><b>${fmtBRL(sim.pretendido.entrada)}</b></div>
+        <div><small>1ª parcela (${d.sistema||'SAC'})</small><b>${fmtBRL2(sim.pretendido.parcela1)}</b></div>
+        <div><small>Renda necessária</small><b>${fmtBRL(sim.pretendido.rendaMinima)}</b></div>
+      </div>
+      <p class="rel-nota">${sim.pretendido.cabe ? 'O imóvel pretendido cabe no perfil informado, sujeito à análise de crédito do banco.' : 'O imóvel pretendido ainda não cabe no perfil informado: ' + (!sim.pretendido.cabeRenda ? 'a renda precisa chegar a ' + fmtBRL(sim.pretendido.rendaMinima) : '') + (!sim.pretendido.cabeRenda && sim.pretendido.entradaFalta >= 1 ? ' e ' : '') + (sim.pretendido.entradaFalta >= 1 ? 'a entrada precisa de mais ' + fmtBRL(sim.pretendido.entradaFalta) : '') + '. A Mude Imóveis orienta os caminhos: composição de renda, FGTS, permuta ou ajuste do valor.'}</p>
     </section>` : ''}
     ${recs.map(({o, r}) => r ? `
     <section class="rel-sec">
       <h2>Conferência com a simulação oficial ${o.banco}${r.conferido ? ' <span class="rel-selo">Cálculo conferido</span>' : ''}</h2>
-      <p class="rel-nota" style="margin-top:0">${o.descricao ? o.descricao + '. ' : ''}Cálculo refeito pela Mude Imóveis com os mesmos parâmetros do banco: financiado ${fmtBRL(o.det.financiado)}, ${o.det.prazoMeses} meses, ${fmtPct(r.taxa)} a.a. efetiva, ${o.det.sistema||d.sistema||'SAC'}.</p>
+      <p class="rel-nota" style="margin-top:0">${o.descricao ? o.descricao + '. ' : ''}Cálculo refeito pela Mude Imóveis com os mesmos parâmetros do banco: financiado ${fmtBRL(o.det.financiado)}, ${o.det.prazoMeses} meses, ${fmtPct(r.taxa)} a.a. efetiva, ${o.det.sistema||d.sistema||'SAC'}${o.det.prazoMeses?' ('+fmtPrazo(o.det.prazoMeses)+')':''}.</p>
       <table class="rel-tab">
         <thead><tr><th>1ª parcela</th><th ${R}>${o.banco} (oficial)</th><th ${R}>Mude Imóveis</th><th ${R}>Diferença</th></tr></thead>
         <tbody>${r.linhas.map(l=>`<tr${l[0]==='1ª parcela'?' class="top"':''}><td>${l[0]}</td><td ${R}>${fmtBRL2(l[1])}</td><td ${R}>${fmtBRL2(l[2])}</td><td ${R}>${fmtBRL2(l[2]-l[1])}</td></tr>`).join('')}</tbody>
@@ -1723,7 +1851,7 @@ function gerarRelatorio(sim, meta){
       <h2>Simulação oficial ${o.banco}</h2>
       <table class="rel-tab">
         <thead><tr><th>Descrição</th><th ${R}>Taxa a.a.</th><th ${R}>1ª parcela</th><th ${R}>Prazo</th><th ${R}>Financiado</th></tr></thead>
-        <tbody><tr><td>${o.descricao||'—'}</td><td ${R}>${o.taxa?fmtPct(o.taxa):'—'}</td><td ${R}>${o.parcela1?fmtBRL2(o.parcela1):'—'}</td><td ${R}>${o.prazoMeses?Math.round(o.prazoMeses/12)+' anos':'—'}</td><td ${R}>${o.financiado?fmtBRL(o.financiado):'—'}</td></tr></tbody>
+        <tbody><tr><td>${o.descricao||'—'}</td><td ${R}>${o.taxa?fmtPct(o.taxa):'—'}</td><td ${R}>${o.parcela1?fmtBRL2(o.parcela1):'—'}</td><td ${R}>${o.prazoMeses?fmtPrazo(o.prazoMeses):'—'}</td><td ${R}>${o.financiado?fmtBRL(o.financiado):'—'}</td></tr></tbody>
       </table>
     </section>`).join('')}
     ${d.anexarFluxo && sim.fluxo ? `
@@ -1797,7 +1925,7 @@ function textoWhats(sim, meta){
   L.push('Imóvel: ' + fmtBRL(d.valorImovel||0) + (d.condicao==='usado'?' (usado)':' (novo)'));
   L.push('Entrada: ' + fmtBRL(d.valorImovel-(m.financiado||0)));
   L.push('Melhor condição: ' + (m.instituicao||'') + ' · ' + (m.linha||'') + ' · ' + fmtPct(m.taxa_aa||0) + ' a.a.');
-  L.push('1ª parcela (' + (d.sistema||'SAC') + '): ' + fmtBRL2(m.parcela1||0) + ' em ' + Math.round((m.prazoMeses||0)/12) + ' anos');
+  L.push('1ª parcela (' + (d.sistema||'SAC') + '): ' + fmtBRL2(m.parcela1||0) + ' em ' + fmtPrazo(m.prazoMeses||0));
   L.push('Renda necessária para a parcela (30%): ' + fmtBRL(m.rendaMinima||0));
   if (sim.potencial) L.push('*Potencial de compra: imóvel de até ' + fmtBRL(sim.potencial.valorImovel) + '* (entrada de ' + fmtBRL(sim.potencial.entrada) + ')');
   L.push('');
@@ -1897,6 +2025,7 @@ function enviarWhatsSalva(id){
 let OFICIAIS = [];
 let CUSTOS_MANUAL = {}; // valores de despesas digitados pelo corretor (itbi, cartorio, avaliacao)
 let OF_LIDO = null; // dados extraídos do último PDF selecionado
+let FORM_OF_ABERTO = false; // mantém o formulário de anexo aberto para subir a próxima simulação (ex.: SAC e depois Price)
 
 const brNum = t => t == null ? null : parseFloat(String(t).replace(/\./g,'').replace(',','.'));
 function idadeNaData(nascBR, dataBR){
@@ -1957,22 +2086,46 @@ function extrairSimulacao(txt){
 }
 async function lerPdfOficial(input){
   const msg = el('ofMsg'); OF_LIDO = null;
-  const f = input.files[0]; if (!f || !window.pdfjsLib) return;
-  msg.textContent = 'Lendo o PDF…'; msg.className = 'msg ok';
+  const arquivos = Array.from(input.files || []);
+  if (!arquivos.length || !window.pdfjsLib) return;
+  msg.textContent = arquivos.length > 1 ? `Lendo ${arquivos.length} PDFs…` : 'Lendo o PDF…'; msg.className = 'msg ok';
+  // vários PDFs de uma vez (ex.: SAC e Price): os reconhecidos entram direto no comparativo
+  if (arquivos.length > 1){
+    const ok = [], falhou = [];
+    for (const f of arquivos){
+      try {
+        const o = extrairSimulacao(await textoDoPdf(f));
+        if (!o.parcela1){ falhou.push(f.name); continue; }
+        let paginas = []; try { paginas = await paginasDoPdf(f); } catch(e){}
+        incluirOficial(montarOficial(o, { banco: o.banco || 'Outro', descricao: descOficial(o), paginas }));
+        ok.push(`${o.banco||'banco'} ${o.sistema||''}`.trim());
+      } catch(e){ console.warn('leitura pdf:', f.name, e); falhou.push(f.name); }
+    }
+    FORM_OF_ABERTO = true;
+    posOficial(ok.length ? `${ok.length} simulação(ões) adicionada(s): ${ok.join(', ')}.` + (falhou.length ? ` Não reconheci: ${falhou.join(', ')} (suba um por vez e preencha à mão).` : '') : `Não reconheci o layout dos PDFs (${falhou.join(', ')}). Suba um por vez e preencha os campos.`, !ok.length);
+    return;
+  }
+  const f = arquivos[0];
   try {
     const o = extrairSimulacao(await textoDoPdf(f));
     const achou = ['parcela1','financiado','prazoMeses','jurosEfetivos'].filter(k => o[k]).length;
     if (!achou){ msg.textContent = 'Não reconheci o layout deste PDF. Preencha os campos manualmente.'; msg.className = 'msg erro'; return; }
     OF_LIDO = o;
     if (o.banco) el('ofBanco').value = o.banco;
-    if (o.linha || o.data) el('ofDesc').value = [o.linha, o.data ? 'simulação de ' + o.data : ''].filter(Boolean).join(', ');
+    el('ofDesc').value = descOficial(o);
+    if (o.sistema) el('ofSistema').value = o.sistema === 'PRICE' ? 'PRICE' : 'SAC';
     if (o.jurosEfetivos) el('ofTaxa').value = o.jurosEfetivos;
     if (o.parcela1) el('ofParcela').value = o.parcela1.toLocaleString('pt-BR', {minimumFractionDigits:2});
     if (o.prazoMeses) el('ofPrazo').value = +(o.prazoMeses / 12).toFixed(2);
     if (o.financiado) el('ofFin').value = Math.round(o.financiado).toLocaleString('pt-BR');
-    msg.textContent = `PDF lido: ${o.banco||'banco'} · ${o.linha||''} · ${o.prazoMeses||'?'} meses · 1ª parcela ${o.parcela1?fmtBRL2(o.parcela1):'?'}. Confira e clique em "Adicionar ao comparativo".`;
+    if (o.valorImovel) el('ofImovel').value = Math.round(o.valorImovel).toLocaleString('pt-BR');
+    if (o.entrada) el('ofEntrada').value = Math.round(o.entrada).toLocaleString('pt-BR');
+    msg.textContent = `PDF lido: ${o.banco||'banco'} · ${o.linha||''} · ${o.sistema||'sistema ?'} · ${o.prazoMeses?fmtPrazo(o.prazoMeses):'prazo ?'} · 1ª parcela ${o.parcela1?fmtBRL2(o.parcela1):'?'}. Confira e clique em "Adicionar ao comparativo".`;
     msg.className = 'msg ok';
   } catch(e){ console.warn('leitura pdf:', e); msg.textContent = 'Não consegui ler o texto do PDF. Preencha os campos manualmente.'; msg.className = 'msg erro'; }
+}
+function descOficial(o){
+  return [o.linha, o.data ? 'simulação de ' + o.data : ''].filter(Boolean).join(', ');
 }
 
 /* Reconciliação: refaz o cálculo com os MESMOS parâmetros do banco e aponta cada divergência
@@ -2029,42 +2182,89 @@ function reconcHTML(o, d){
   </div>`;
 }
 
+/* Números de cada simulação oficial, com os parâmetros do próprio banco (para o comparativo SAC x Price) */
+function numerosOficial(o, d){
+  const det = o.det || {}, taxa = det.jurosEfetivos || o.taxa, n = det.prazoMeses || o.prazoMeses, VF = det.financiado || o.financiado;
+  const sistema = det.sistema || o.sistema || '';
+  const V = det.valorImovel || d.valorImovel || 0, idade = det.idade ?? d.idade;
+  let ultima = det.ultima || null, totalPago = null, totalJuros = null;
+  if (taxa && n && VF && sistema){
+    const linha = { instituicao: o.banco, linha: det.linha || '', taxa_aa: taxa, correcao: /fixa/i.test(det.indexador||'') ? 'fixa' : 'TR' };
+    const fx = fluxoPagamento(linha, { ...d, sistema, idade }, VF, V, n);
+    if (fx){ totalPago = fx.totalPago; totalJuros = fx.totalJuros; }
+    if (!ultima) ultima = componentesParcela(VF, V, taxa, n, idade, sistema).ultima;
+  }
+  const p1 = det.parcela1 || o.parcela1;
+  return { banco: o.banco, sistema, taxa, prazoMeses: n, financiado: VF, valorImovel: det.valorImovel || null, entrada: det.entrada || null,
+    parcela1: p1, ultima, rendaMinima: p1 ? p1 / PARAM.comprometimento : null, totalPago, totalJuros, base: !!o.base };
+}
+/* Leitura automática quando há uma simulação SAC e uma Price */
+function leituraSacPrice(nums){
+  const S = nums.find(x => x.sistema === 'SAC'), P = nums.find(x => x.sistema === 'PRICE');
+  if (!S || !P || !S.parcela1 || !P.parcela1) return '';
+  const dp = S.parcela1 - P.parcela1, dr = (S.rendaMinima||0) - (P.rendaMinima||0);
+  const dt = (P.totalPago && S.totalPago) ? P.totalPago - S.totalPago : null;
+  const mesmo = S.financiado && P.financiado && Math.abs(S.financiado - P.financiado) < 1 && S.prazoMeses === P.prazoMeses;
+  return `No Price a 1ª parcela sai ${fmtBRL2(Math.abs(dp))} ${dp>=0?'menor':'maior'} que no SAC e a renda exigida ${dr>=0?'cai':'sobe'} ${fmtBRL(Math.abs(dr))}${dt!=null?`; em contrapartida, o total pago estimado é ${fmtBRL(Math.abs(dt))} ${dt>=0?'maior':'menor'}`:''}. ${mesmo ? '' : '<b>Atenção:</b> as duas simulações não têm o mesmo valor financiado e prazo, então a comparação não é pura. '}Price favorece a aprovação e o fôlego mensal; SAC reduz o custo total e a parcela cai ao longo do contrato.`;
+}
 function desenharOficiais(melhor, d){
+  const nums = OFICIAIS.map(o => numerosOficial(o, d));
+  const lista = ULTIMA?.resultados || [];
   const linhas = OFICIAIS.map((o, idx) => {
-    const dif = melhor && o.parcela1 ? o.parcela1 - melhor.parcela1 : null;
-    return `<tr>
-      <td><b>${o.banco}</b></td><td>${o.descricao||''}${o.paginas?.length?`<br><small style="color:var(--texto2)">${o.paginas.length} página do PDF anexada ao relatório</small>`:''}</td>
+    const sis = nums[idx].sistema;
+    // compara com a nossa melhor condição calculada no MESMO sistema do banco
+    const nossa = melhor && o.parcela1 ? (sis && sis !== d.sistema ? calcular(melhor.linha, { ...d, sistema: sis }).parcela1 : melhor.parcela1) : null;
+    const dif = nossa != null ? o.parcela1 - nossa : null;
+    return `<tr${o.base?' class="melhor"':''}>
+      <td><b>${o.banco}</b>${o.base?'<br><span class="tag gold">base do cálculo</span>':''}</td><td>${o.descricao||''}${o.paginas?.length?`<br><small style="color:var(--texto2)">${o.paginas.length} página do PDF anexada ao relatório</small>`:''}</td>
+      <td>${sis||'—'}</td>
       <td class="num">${o.taxa?fmtPct(o.taxa):'—'}</td>
       <td class="num"><b>${o.parcela1?fmtBRL2(o.parcela1):'—'}</b></td>
-      <td class="num">${o.prazoMeses?Math.round(o.prazoMeses/12)+' anos':'—'}</td>
+      <td class="num">${o.prazoMeses?fmtPrazo(o.prazoMeses):'—'}</td>
       <td class="num">${o.financiado?fmtBRL(o.financiado):'—'}</td>
-      <td>${dif===null?'':dif>1?`<span class="tag no">${fmtBRL2(dif)}/mês acima da melhor do comparativo</span>`:dif<-1?`<span class="tag ok">${fmtBRL2(-dif)}/mês abaixo da melhor do comparativo</span>`:'<span class="tag gold">empatada</span>'}</td>
-      <td><button class="btn mini ghost" onclick="removerOficial(${idx})">Remover</button></td>
+      <td>${dif===null?'':dif>1?`<span class="tag no">${fmtBRL2(dif)}/mês acima da nossa melhor (${sis||d.sistema})</span>`:dif<-1?`<span class="tag ok">${fmtBRL2(-dif)}/mês abaixo da nossa melhor (${sis||d.sistema})</span>`:'<span class="tag gold">empatada</span>'}</td>
+      <td style="white-space:nowrap">${o.base?'':`<button class="btn mini" onclick="adotarOficial(${idx})">Usar como base</button> `}<button class="btn mini ghost" onclick="removerOficial(${idx})">Remover</button></td>
     </tr>`;
   }).join('');
+  const comp = nums.length >= 2 ? `
+    <div class="secao-titulo" style="margin-top:14px"><h3 style="font-size:14px">Comparativo entre as simulações oficiais</h3></div>
+    <div class="scroll-x"><table>
+      <thead><tr><th></th>${nums.map(x => `<th class="num">${x.banco} · ${x.sistema||'—'}${x.base?' ★':''}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${[['Taxa efetiva a.a.', 'taxa', fmtPct], ['Prazo', 'prazoMeses', fmtPrazo], ['Valor financiado', 'financiado', fmtBRL], ['1ª parcela', 'parcela1', fmtBRL2], ['Última parcela', 'ultima', fmtBRL2], ['Renda necessária (30%)', 'rendaMinima', fmtBRL], ['Total pago estimado', 'totalPago', fmtBRL]]
+          .map(([rot, k, f]) => `<tr${k==='parcela1'?' class="melhor"':''}><td>${rot}</td>${nums.map(x => `<td class="num">${x[k]!=null?f(x[k]):'—'}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>
+    ${leituraSacPrice(nums) ? `<div class="aviso" style="margin-top:8px">${leituraSacPrice(nums)}</div>` : ''}
+    <div style="font-size:12px;color:var(--texto2);margin-top:6px">Última parcela e total pago: projeção da Mude Imóveis com os parâmetros de cada simulação oficial e a TR de referência (quando o PDF não traz a última parcela). ★ simulação usada como base do cálculo.</div>` : '';
   return `
     <div class="secao-titulo"><h3>Simulações oficiais dos bancos</h3></div>
     ${OFICIAIS.length ? `<div class="scroll-x"><table>
-      <thead><tr><th>Banco</th><th>Descrição</th><th class="num">Taxa a.a.</th><th class="num">1ª parcela</th><th class="num">Prazo</th><th class="num">Financiado</th><th>Comparação com a nossa melhor</th><th></th></tr></thead>
+      <thead><tr><th>Banco</th><th>Descrição</th><th>Sistema</th><th class="num">Taxa a.a.</th><th class="num">1ª parcela</th><th class="num">Prazo</th><th class="num">Financiado</th><th>Comparação com a nossa melhor</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table></div>
-      <div style="font-size:12px;color:var(--texto2);margin-top:6px">A coluna "Comparação" confronta o banco com a melhor condição do nosso comparativo, que pode usar outra linha, taxa ou entrada. A reconciliação abaixo refaz o nosso cálculo com os parâmetros exatos do banco.</div>
-      ${OFICIAIS.map(o => reconcHTML(o, d)).join('')}` : `<div class="aviso">Nenhuma simulação oficial anexada. Suba o PDF gerado pelo banco: o sistema lê os parâmetros, refaz o cálculo com os mesmos dados e mostra a reconciliação item a item.</div>`}
-    <div class="form-inline" id="formOficial" style="display:none">
-      <div style="margin-bottom:10px"><label>PDF do banco (lido automaticamente)</label><input id="ofPdf" type="file" accept="application/pdf" style="padding:7px" onchange="lerPdfOficial(this)"></div>
-      <div class="grid g3" style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--texto2);margin-top:6px">A simulação marcada como base tem seus dados (prazo, sistema, valor do imóvel e entrada) assumidos no formulário; se você alterar algum campo depois, o sistema recalcula e aponta a divergência. A coluna "Comparação" confronta cada banco com a nossa melhor condição no mesmo sistema de amortização.</div>
+      ${comp}
+      ${OFICIAIS.map(o => reconcHTML(o, d)).join('')}` : `<div class="aviso">Nenhuma simulação oficial anexada. Suba o PDF gerado pelo banco (pode subir o SAC e o Price juntos): o sistema lê os parâmetros, assume os dados oficiais, refaz o cálculo e mostra a reconciliação item a item.</div>`}
+    <div class="form-inline" id="formOficial" style="display:${FORM_OF_ABERTO?'block':'none'}">
+      <div style="margin-bottom:10px"><label>PDF(s) do banco · pode selecionar mais de um (ex.: SAC e Price)</label><input id="ofPdf" type="file" accept="application/pdf" multiple style="padding:7px" onchange="lerPdfOficial(this)"></div>
+      <div class="grid g4" style="margin-bottom:10px">
         <div><label>Banco</label><select id="ofBanco"><option>Caixa</option><option>BB</option><option>Itaú</option><option>Bradesco</option><option>Santander</option><option>Inter</option><option>Sicredi</option><option>Outro</option></select></div>
+        <div><label>Sistema</label><select id="ofSistema"><option value="SAC">SAC</option><option value="PRICE">Price</option></select></div>
         <div><label>Descrição / linha</label><input id="ofDesc" placeholder="ex.: SBPE TR, simulação de 05/08"></div>
         <div><label>Taxa efetiva % a.a.</label><input id="ofTaxa" type="number" step="0.01"></div>
       </div>
-      <div class="grid g3" style="margin-bottom:10px">
-        <div><label>1ª parcela (R$)</label><input id="ofParcela" type="text" inputmode="numeric"></div>
-        <div><label>Prazo (anos)</label><input id="ofPrazo" type="number" min="1" max="35" step="0.01"></div>
+      <div class="grid g4" style="margin-bottom:10px">
+        <div><label>Valor do imóvel (R$)</label><input id="ofImovel" type="text" inputmode="numeric"></div>
+        <div><label>Entrada (R$)</label><input id="ofEntrada" type="text" inputmode="numeric"></div>
         <div><label>Valor financiado (R$)</label><input id="ofFin" type="text" inputmode="numeric"></div>
+        <div><label>Prazo (anos)</label><input id="ofPrazo" type="number" min="1" max="35" step="any"></div>
+      </div>
+      <div class="grid g4" style="margin-bottom:10px">
+        <div><label>1ª parcela (R$)</label><input id="ofParcela" type="text" inputmode="numeric"></div>
       </div>
       <button class="btn mini gold" onclick="adicionarOficial()">Adicionar ao comparativo</button>
       <span id="ofMsg" class="msg" style="margin-left:10px"></span>
     </div>
-    <button class="btn mini ghost" style="margin-top:10px" onclick="el('formOficial').style.display = el('formOficial').style.display==='block' ? 'none' : 'block'">Anexar simulação oficial do banco (PDF)</button>`;
+    <button class="btn mini ghost" style="margin-top:10px" onclick="FORM_OF_ABERTO = !FORM_OF_ABERTO; el('formOficial').style.display = FORM_OF_ABERTO ? 'block' : 'none'">${OFICIAIS.length ? 'Anexar outra simulação oficial (PDF)' : 'Anexar simulação oficial do banco (PDF)'}</button>`;
 }
 /* Recorta as margens brancas da página renderizada, para o anexo ocupar a folha com letra maior */
 function recortarBranco(c){
@@ -2109,17 +2309,73 @@ async function adicionarOficial(){
   try { paginas = await paginasDoPdf(el('ofPdf').files[0]); }
   catch(e){ console.warn('pdf oficial:', e); }
   const taxa = parseFloat(el('ofTaxa').value) || null;
-  const prazoMeses = Math.round((parseFloat(el('ofPrazo').value)||0) * 12) || null;
-  const financiado = lerC('ofFin') || null;
-  // parâmetros do PDF; se não houver PDF legível, usa o que foi digitado
-  const det = OF_LIDO ? { ...OF_LIDO } : { parcela1, prazoMeses, financiado, jurosEfetivos: taxa };
-  det.parcela1 = parcela1; if (prazoMeses) det.prazoMeses = prazoMeses; if (financiado) det.financiado = financiado; if (taxa) det.jurosEfetivos = taxa;
-  OFICIAIS.push({ banco: el('ofBanco').value, descricao: el('ofDesc').value.trim(), taxa, parcela1, prazoMeses, financiado, paginas, det });
+  const prazoMeses = Math.round((parseFloat(String(el('ofPrazo').value).replace(',','.'))||0) * 12) || null;
+  // o que está no formulário prevalece sobre o que foi lido do PDF (o corretor pode corrigir)
+  const dig = { parcela1, prazoMeses, financiado: lerC('ofFin') || null, jurosEfetivos: taxa,
+    valorImovel: lerC('ofImovel') || null, entrada: lerC('ofEntrada') || null, sistema: el('ofSistema').value };
+  const o = OF_LIDO ? { ...OF_LIDO } : {};
+  for (const k in dig) if (dig[k]) o[k] = dig[k];
+  incluirOficial(montarOficial(o, { banco: el('ofBanco').value, descricao: el('ofDesc').value.trim(), paginas }));
+  OF_LIDO = null; FORM_OF_ABERTO = true;
+  posOficial(`Simulação ${o.sistema||''} adicionada. ${OFICIAIS.length === 1 ? 'Para comparar, anexe agora a simulação no outro sistema (SAC ou Price).' : 'Comparativo atualizado.'}`);
+}
+/* Monta o registro da simulação oficial a partir dos dados lidos/digitados */
+function montarOficial(o, extra){
+  const det = { ...o };
+  if (!det.financiado && det.valorImovel && det.entrada) det.financiado = det.valorImovel - det.entrada;
+  if (!det.entrada && det.valorImovel && det.financiado) det.entrada = det.valorImovel - det.financiado;
+  if (det.sistema) det.sistema = /PRICE/i.test(det.sistema) ? 'PRICE' : 'SAC';
+  return { banco: extra.banco, descricao: extra.descricao || '', taxa: det.jurosEfetivos || null, parcela1: det.parcela1,
+    prazoMeses: det.prazoMeses || null, financiado: det.financiado || null, sistema: det.sistema || '', paginas: extra.paginas || [], det };
+}
+/* Inclui no comparativo; a primeira simulação vira a base e os dados oficiais são assumidos no formulário */
+function incluirOficial(of){
+  OFICIAIS.push(of);
+  if (!OFICIAIS.some(o => o.base)) adotarOficial(OFICIAIS.length - 1, true);
+}
+/* Assume os dados oficiais do banco no formulário (prazo, sistema, valor do imóvel e entrada) e registra o que mudou */
+function adotarOficial(idx, silencioso){
+  const o = OFICIAIS[idx]; if (!o) return;
+  OFICIAIS.forEach((x, i) => x.base = i === idx);
+  const det = o.det || {}, aj = [];
+  const troca = (id, rot, novo, fmtAntes, fmtNovo, valorCampo) => {
+    const antes = el(id).value;
+    if (String(antes) === String(valorCampo)) return;
+    aj.push({ rot, antes: antes ? fmtAntes(antes) : 'vazio', depois: fmtNovo(novo) });
+    el(id).value = valorCampo;
+  };
+  if (det.prazoMeses){
+    const anos = +(det.prazoMeses / 12).toFixed(2);
+    troca('fPrazo', 'prazo', det.prazoMeses, a => fmtPrazo(Math.round(parseFloat(String(a).replace(',','.')) * 12)), fmtPrazo, anos);
+    infoPrazo();
+  }
+  if (det.sistema) troca('fSistema', 'sistema', det.sistema, a => a, x => x, det.sistema);
+  if (det.valorImovel){
+    if (el('fModo').value === 'imovel'){ el('fModo').value = 'completa'; uiModo(); aj.push({ rot:'objetivo', antes:'quanto de imóvel consigo', depois:'simulação completa' }); }
+    troca('fImovel', 'valor do imóvel', det.valorImovel, a => fmtBRL(lerMoeda('fImovel')), fmtBRL, Math.round(det.valorImovel).toLocaleString('pt-BR'));
+  }
+  if (det.entrada){
+    const fgts = el('fUsarFgts').value === 'sim' ? lerMoeda('fFgts') : 0;
+    const propria = Math.max(0, Math.round(det.entrada - fgts));
+    troca('fEntrada', 'entrada', det.entrada, a => fmtBRL(lerMoeda('fEntrada') + fgts), x => fmtBRL(x), propria.toLocaleString('pt-BR'));
+  }
+  o.ajustes = aj;
+  if (!silencioso) posOficial(`Dados oficiais ${o.banco}${det.sistema?' · '+det.sistema:''} assumidos como base.`);
+}
+function limparFormOficial(){
+  ['ofPdf','ofDesc','ofTaxa','ofImovel','ofEntrada','ofFin','ofPrazo','ofParcela'].forEach(i => { if (el(i)) el(i).value = ''; });
   OF_LIDO = null;
+}
+function posOficial(texto, erro){
+  if (!erro) limparFormOficial();
   if (ULTIMA){ ULTIMA.oficiais = OFICIAIS; simular(true); }
+  else if (lerMoeda('fImovel') >= 20000 || (el('fModo').value === 'imovel' && lerMoeda('fRenda') > 0)) simular(true);
+  const m = el('ofMsg'); if (m){ m.textContent = texto; m.className = 'msg ' + (erro ? 'erro' : 'ok'); }
 }
 function removerOficial(idx){
+  const eraBase = OFICIAIS[idx]?.base;
   OFICIAIS.splice(idx, 1);
+  if (eraBase && OFICIAIS.length) OFICIAIS[0].base = true; // a próxima vira base, sem mexer no formulário
   if (ULTIMA){ ULTIMA.oficiais = OFICIAIS; simular(true); }
 }
 
