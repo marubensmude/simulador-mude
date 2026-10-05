@@ -267,7 +267,7 @@
       <div id="bPrazo"><label>Prazo (anos, aceita fração)</label><input id="fPrazo" type="number" value="35" min="1" max="35" step="any" oninput="infoPrazo()"><small id="prazoInfo" style="display:block;color:var(--texto2);margin-top:4px">420 meses</small></div>
     </div>
     <div class="grid g5" style="margin-bottom:18px">
-      <div><label>Sistema de amortização (cálculo)</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
+      <div><label>Sistema de amortização (cálculo)</label><select id="fSistema" onchange="trocarSistemaBase()"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
       <div><label>Imóvel</label><select id="fCondicao"><option value="novo">Novo</option><option value="usado">Usado</option></select></div>
       <div><label>Empreendimento financiado na CAIXA?</label><select id="fEmpreendCaixa" title="Imóvel novo vinculado a empreendimento (obra/incorporação) financiado pela CAIXA: libera a linha SBPE Empreendimento CAIXA, com cota de até 90% no SAC"><option value="nao">Não / não sei</option><option value="sim">Sim</option></select></div>
       <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
@@ -2197,10 +2197,12 @@ function reconciliar(o, d, mel, lista){
 }
 function reconcHTML(o, d){
   const r = reconciliar(o, d); if (!r) return '';
+  const secundaria = !o.base && OFICIAIS.some(x => x.base);
+  if (secundaria) r.par = []; // parâmetros só se comparam com a simulação base; esta serve para conferir o cálculo e o comparativo SAC x Price
   const div = r.par.filter(p => p.diverge);
   return `<div class="reconc">
     <h4>Reconciliação · ${o.banco} ${o.det.linha||''} ${r.conferido ? '<span class="tag ok">Cálculo conferido</span>' : '<span class="tag no">Diferença de '+(r.difPerc*100).toFixed(1).replace('.',',')+'%</span>'}</h4>
-    <div style="font-size:12.5px;color:var(--texto2);margin-bottom:8px">Nosso cálculo refeito com os mesmos parâmetros do banco: financiado ${fmtBRL(o.det.financiado)}, ${o.det.prazoMeses} meses, ${fmtPct(r.taxa)} a.a. efetiva, ${o.det.sistema||d.sistema}, proponente com ${r.idade} anos.</div>
+    <div style="font-size:12.5px;color:var(--texto2);margin-bottom:8px">Nosso cálculo refeito com os mesmos parâmetros do banco: financiado ${fmtBRL(o.det.financiado)}, ${o.det.prazoMeses} meses, ${fmtPct(r.taxa)} a.a. efetiva, ${o.det.sistema||d.sistema}, proponente com ${r.idade} anos.${secundaria ? ' Simulação complementar: os parâmetros do formulário são comparados com a simulação base; para usar esta como base, escolha ' + (o.det.sistema || 'o sistema dela') + ' no campo "Sistema de amortização".' : ''}</div>
     <div class="scroll-x"><table>
       <thead><tr><th>1ª parcela</th><th class="num">${o.banco} (oficial)</th><th class="num">Mude Imóveis</th><th class="num">Diferença</th></tr></thead>
       <tbody>${r.linhas.map(l => `<tr${l[0]==='1ª parcela'?' class="melhor"':''}><td>${l[0]}</td><td class="num">${fmtBRL2(l[1])}</td><td class="num">${fmtBRL2(l[2])}</td><td class="num">${fmtBRL2(l[2]-l[1])}</td></tr>`).join('')}</tbody>
@@ -2397,6 +2399,17 @@ function adotarOficial(idx, silencioso){
   }
   o.ajustes = aj;
   if (!silencioso) posOficial(`Dados oficiais ${o.banco}${det.sistema?' · '+det.sistema:''} assumidos como base.`);
+}
+/* Com SAC e Price oficiais anexados: escolher o sistema no formulário passa a usar a simulação oficial daquele sistema como base
+   (prazo, valor do imóvel e entrada do próprio banco), em vez de comparar um SAC com a simulação Price ou vice-versa. */
+function trocarSistemaBase(){
+  const sis = el('fSistema').value;
+  const atual = OFICIAIS.find(o => o.base);
+  if (!atual || (atual.det && atual.det.sistema === sis)) return;
+  const idx = OFICIAIS.findIndex(o => o.det && o.det.sistema === sis);
+  if (idx < 0) return;
+  adotarOficial(idx, true);
+  posOficial(`Base trocada para a simulação oficial ${OFICIAIS[idx].banco} ${sis}: prazo, imóvel e entrada assumidos do banco.`);
 }
 function limparFormOficial(){
   ['ofPdf','ofDesc','ofTaxa','ofImovel','ofEntrada','ofFin','ofPrazo','ofParcela'].forEach(i => { if (el(i)) el(i).value = ''; });
