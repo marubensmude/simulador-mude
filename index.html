@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Simulador Mude · Mude Imóveis</title>
-<link rel="icon" href="favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <meta name="theme-color" content="#141414">
 <style>
   :root{
@@ -34,8 +34,8 @@
   .card h2{font-size:20px;margin-bottom:4px}
   .card .sub{color:var(--texto2);font-size:13px;margin-bottom:18px}
   .grid{display:grid;gap:14px}
-  .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
-  @media(max-width:860px){.g3,.g4,.g2{grid-template-columns:1fr 1fr}} @media(max-width:560px){.g3,.g4,.g2{grid-template-columns:1fr}}
+  .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)} .g2{grid-template-columns:repeat(2,1fr)} .g5{grid-template-columns:repeat(5,1fr)}
+  @media(max-width:860px){.g3,.g4,.g5,.g2{grid-template-columns:1fr 1fr}} @media(max-width:560px){.g3,.g4,.g5,.g2{grid-template-columns:1fr}}
   label{font-size:11.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--texto2);display:block;margin-bottom:5px;font-weight:600}
   input,select{width:100%;padding:10px 12px;border:1px solid var(--cinza2);border-radius:6px;font-size:14.5px;background:#fcfbf9;color:var(--texto)}
   input:focus,select:focus{outline:none;border-color:var(--dourado)}
@@ -266,9 +266,10 @@
       <div id="bRenda"><label id="lblRenda">Renda bruta mensal (R$)</label><input id="fRenda" type="text" inputmode="numeric" placeholder="12.000"></div>
       <div id="bPrazo"><label>Prazo (anos, aceita fração)</label><input id="fPrazo" type="number" value="35" min="1" max="35" step="any" oninput="infoPrazo()"><small id="prazoInfo" style="display:block;color:var(--texto2);margin-top:4px">420 meses</small></div>
     </div>
-    <div class="grid g4" style="margin-bottom:18px">
+    <div class="grid g5" style="margin-bottom:18px">
       <div><label>Sistema de amortização (cálculo)</label><select id="fSistema"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
       <div><label>Imóvel</label><select id="fCondicao"><option value="novo">Novo</option><option value="usado">Usado</option></select></div>
+      <div><label>Empreendimento financiado na CAIXA?</label><select id="fEmpreendCaixa" title="Imóvel novo vinculado a empreendimento (obra/incorporação) financiado pela CAIXA: libera a linha SBPE Empreendimento CAIXA, com cota de até 90% no SAC"><option value="nao">Não / não sei</option><option value="sim">Sim</option></select></div>
       <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
       <div><label>Primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
     </div>
@@ -418,6 +419,7 @@ const PARAM = {
    Para incluir um novo ponto, anexe a simulação oficial: o quadro de reconciliação mostra a taxa MIP do banco. */
 const MIP_PONTOS = [
   { idade: 31, taxa: 0.00011573, fonte: 'Caixa · simulação oficial de 23/09/2026' },
+  { idade: 36, taxa: 0.00015378, fonte: 'Caixa · simulações oficiais SAC e Price de 05/10/2026' },
   { idade: 51, taxa: 0.00067406, fonte: 'Caixa · simulação oficial de 23/09/2026' }
 ];
 function taxaMIP(idade){
@@ -441,6 +443,7 @@ const TAXAS_SEED = [
   { instituicao:"BB", linha:"Pró-Cotista FGTS", taxa_aa:9.00, correcao:"TR", cota_max:80, prazo_max_meses:360, obs:"Exige 3+ anos de FGTS · imóvel novo 80%, usado 50%", procotista:true },
   { instituicao:"Caixa", linha:"SBPE", taxa_aa:11.19, correcao:"TR", cota_max:80, prazo_max_meses:420, obs:"Com relacionamento (débito em conta + conta-salário)" },
   { instituicao:"Caixa", linha:"SBPE Balcão", taxa_aa:11.49, correcao:"TR", cota_max:80, prazo_max_meses:420, obs:"Sem relacionamento · mesma taxa do simulador oficial da Caixa (10,92% nominal)" },
+  { instituicao:"Caixa", linha:"SBPE Empreendimento CAIXA", taxa_aa:11.49, correcao:"TR", cota_max:90, prazo_max_meses:420, obs:"Imóvel novo vinculado a empreendimento financiado na CAIXA · taxa balcão (10,92% nominal) · cota 90% SAC / 80% Price · Price até 360 meses" },
   { instituicao:"Caixa", linha:"SBPE Poupança", taxa_aa:10.76, correcao:"Poupança", cota_max:80, prazo_max_meses:420, obs:"Poupança (6,17%) + 4,59% · estimativa efetiva" },
   { instituicao:"BB", linha:"SBPE", taxa_aa:11.60, correcao:"TR", cota_max:80, prazo_max_meses:420, obs:"Balcão; redução p/ conta-salário" },
   { instituicao:"Itaú", linha:"SBPE", taxa_aa:11.70, correcao:"TR", cota_max:90, prazo_max_meses:420, obs:"Resposta de crédito em até 1h (até R$ 1,5 mi) · Pula Parcela 2x/ano" },
@@ -587,9 +590,10 @@ function componentesParcela(VF, valorImovel, taxa_aa, n, idade, sistema){
 
 /* Calcula a operação completa para uma linha de crédito */
 function calcular(linha, d){
-  const cotaMax = (linha.cota_max||80)/100;
+  const lim = limitesLinha(linha, d.sistema);
+  const cotaMax = lim.cota/100;
   const prazoIdade = d.prazoOficial ? 9999 : Math.floor((PARAM.idadeLimite - d.idade) * 12); // prazo da simulação oficial: o banco já aplicou a regra da idade
-  const prazoMeses = Math.min(d.prazoMeses, linha.prazo_max_meses||420, Math.max(prazoIdade,24));
+  const prazoMeses = Math.min(d.prazoMeses, lim.prazo, Math.max(prazoIdade,24));
   const financiado = Math.min(d.valorImovel - d.entrada, d.valorImovel * cotaMax);
   const entradaNecessaria = d.valorImovel - d.valorImovel * cotaMax;
   const entradaInsuf = d.entrada < entradaNecessaria - 1;
@@ -623,9 +627,19 @@ function linhasElegiveis(taxas, d){
       return true;
     }
     if (t.procotista && d.cotista !== 'sim') return false;
+    if (ehEmpreendCaixa(t) && !(d.empreendCaixa === 'sim' && d.condicao !== 'usado')) return false; // só imóvel novo vinculado a empreendimento financiado na CAIXA
     if (sfi && (t.procotista || (t.linha||'').includes('Poupança'))) return false;
     return true;
   });
+}
+
+/* Linha Caixa SBPE para imóvel vinculado a empreendimento financiado na CAIXA (conferida em simulação oficial de 05/10/2026):
+   taxa balcão 10,92% nominal / 11,49% efetiva · SAC: cota 90% e até 420 meses · Price: cota 80% e até 360 meses */
+const ehEmpreendCaixa = t => t && t.instituicao === 'Caixa' && /Empreendimento/i.test(t.linha || '');
+function limitesLinha(linha, sistema){
+  let cota = linha.cota_max || 80, prazo = linha.prazo_max_meses || 420;
+  if (ehEmpreendCaixa(linha) && sistema === 'PRICE'){ cota = Math.min(cota, 80); prazo = Math.min(prazo, 360); }
+  return { cota, prazo };
 }
 
 /* Elegibilidade ao Pró-Cotista FGTS (Res. CCFGTS 994/2021 e manuais Caixa/BB):
@@ -642,9 +656,10 @@ function elegivelProCotista(d){
 
 /* Modo "quanto de imóvel consigo": resolve o valor máximo a partir da renda */
 function calcModoImovel(linha, d){
-  const cota = (linha.cota_max||80)/100;
+  const lim = limitesLinha(linha, d.sistema);
+  const cota = lim.cota/100;
   const prazoIdade = d.prazoOficial ? 9999 : Math.floor((PARAM.idadeLimite - d.idade) * 12); // prazo da simulação oficial: o banco já aplicou a regra da idade
-  const prazoMeses = Math.min(d.prazoMeses, linha.prazo_max_meses||420, Math.max(prazoIdade,24));
+  const prazoMeses = Math.min(d.prazoMeses, lim.prazo, Math.max(prazoIdade,24));
   const n = prazoMeses, i = iMensal(linha.taxa_aa), mip = taxaMIP(d.idade);
   const pmax = d.renda * PARAM.comprometimento;
   const fator = (d.sistema === 'SAC') ? (1/n + i + mip) : (i / (1 - Math.pow(1+i,-n)) + mip);
@@ -731,10 +746,13 @@ function aplicarCusto(inp){
 }
 function restaurarCusto(k){ delete CUSTOS_MANUAL[k]; if (ULTIMA) simular(true); }
 
-/* Tarifa de avaliação: 1º a simulação oficial anexada (valor real do banco), 2º a tabela conferida por banco, 3º a estimativa média */
+/* Tarifa de avaliação: 1º a simulação oficial anexada (valor real do banco, inclusive R$ 0,00 quando o banco isenta,
+   como no imóvel vinculado a empreendimento financiado na CAIXA), 2º a tabela conferida por banco, 3º a estimativa média.
+   A simulação marcada como base tem prioridade, porque é ela que define o banco da operação. */
 function avaliacaoDoBanco(banco){
-  const of = OFICIAIS.find(o => o.det && o.det.avaliacao && (!banco || o.banco === banco)) || OFICIAIS.find(o => o.det && o.det.avaliacao);
-  if (of) return { valor: of.det.avaliacao, seguroVista: of.det.seguroVista || 0, banco: of.banco, fonte: 'simulação oficial ' + of.banco + (of.det.data ? ' de ' + of.det.data : '') };
+  const lida = o => o.det && typeof o.det.avaliacao === 'number' && o.det.avaliacao >= 0;
+  const of = OFICIAIS.find(o => o.base && lida(o)) || OFICIAIS.find(o => lida(o) && (!banco || o.banco === banco)) || OFICIAIS.find(lida);
+  if (of) return { valor: of.det.avaliacao, seguroVista: of.det.seguroVista || 0, banco: of.banco, fonte: 'simulação oficial ' + of.banco + (of.det.data ? ' de ' + of.det.data : '') + (of.det.avaliacao === 0 ? ', sem tarifa de avaliação' : '') };
   const t = banco && PARAM.avaliacaoPorBanco[banco];
   if (t) return { valor: t.valor, seguroVista: 0, banco, fonte: t.fonte };
   return { valor: PARAM.avaliacaoBanco, seguroVista: 0, banco: banco || '', fonte: 'estimativa média' };
@@ -890,6 +908,7 @@ function simular(auto){
     prazoMeses: lerPrazoMeses(),
     sistema: el('fSistema').value,
     condicao: el('fCondicao').value,
+    empreendCaixa: el('fEmpreendCaixa').value,
     cotista: el('fCotista').value,
     primeiro: el('fPrimeiro').value,
     nasc: el('fNasc').value,
@@ -945,14 +964,17 @@ function simular(auto){
   if (melhor && d.modo === 'renda' && d.entrada < melhor.entradaNecessaria){
     d.entrada = melhor.entradaNecessaria; // entrada mínima da melhor linha
   }
-  const bancoRow = d.bancoRel ? resultados.find(r => r.linha.instituicao === d.bancoRel) : null;
+  // com simulação oficial anexada como base, a linha de referência do banco é a mesma que o banco simulou (mesma instituição e taxa)
+  const rowOficial = base && base.det && base.det.jurosEfetivos ? linhaDaOficial(resultados.map(r => ({ ...r.linha, _r: r })), base.banco, base.det.jurosEfetivos, base.det.linha) : null;
+  const bancoRow = rowOficial ? rowOficial._r : d.bancoRel ? resultados.find(r => r.linha.instituicao === d.bancoRel) : null;
+  if (rowOficial && !d.bancoRel) d.bancoRel = base.banco;
   // potencial de compra: usa os parâmetros da simulação oficial anexada (se houver); senão, a linha TR do banco de relacionamento ou a melhor linha TR
   const baseTR = resultados.filter(r => !/Poupan/i.test(r.linha.linha || ''));
   const refPot = (d.bancoRel && baseTR.find(r => r.linha.instituicao === d.bancoRel)) || baseTR[0] || melhor;
   const ofRef = OFICIAIS.find(o => o.det && o.det.jurosEfetivos);
   const linhaOf = ofRef ? { instituicao: ofRef.banco, linha: ofRef.det.linha || 'simulação oficial', taxa_aa: ofRef.det.jurosEfetivos, cota_max: ofRef.det.cota || 80, prazo_max_meses: 420, correcao: ofRef.det.indexador || 'TR', oficial: true } : null;
   const potencial = (d.modo !== 'imovel' && melhor) ? potencialCompra(d, linhaOf ? { linha: linhaOf } : refPot) : null;
-  const bancoCustos = (bancoRow || melhor) ? (bancoRow || melhor).linha.instituicao : '';
+  const bancoCustos = (base && base.banco) || ((bancoRow || melhor) ? (bancoRow || melhor).linha.instituicao : '');
   const custos = custosAquisicao(d, melhor ? melhor.financiado : 0, bancoCustos);
   const linhaFluxo = bancoRow || melhor;
   const fluxo = linhaFluxo ? fluxoPagamento(linhaFluxo.linha, d, linhaFluxo.financiado, d.valorImovel, linhaFluxo.prazoMeses) : null;
@@ -1042,7 +1064,7 @@ function sistemasHTML(c, d){
    qual o maior imóvel que o cliente alcança. Valor exibido arredondado para baixo (múltiplo de R$ 5 mil). */
 function potencialCompra(d, ref){
   if (!d.renda || !ref) return null;
-  const linha = ref.linha, cota = (linha.cota_max || 80) / 100;
+  const linha = ref.linha, cota = limitesLinha(linha, d.sistema).cota / 100;
   const teto = linha.mcmv_faixa ? PARAM.mcmv[linha.mcmv_faixa].tetoImovel : PARAM.tetoSFH;
   const maximo = calcModoImovel(linha, { ...d, entrada: 0 });
   const valor = Math.min(teto, Math.floor(maximo.valorImovelMax / 5000) * 5000);
@@ -1051,7 +1073,7 @@ function potencialCompra(d, ref){
   const E = d.entradaDisponivel || 0;
   const tetoEntrada = E > 0 ? Math.floor(E / (1 - cota) / 1000) * 1000 : 0;
   return {
-    instituicao: linha.instituicao, linha: linha.linha, taxa_aa: linha.taxa_aa, cota: linha.cota_max || 80, oficial: !!linha.oficial,
+    instituicao: linha.instituicao, linha: linha.linha, taxa_aa: linha.taxa_aa, cota: limitesLinha(linha, d.sistema).cota, oficial: !!linha.oficial,
     valorImovel: valor, valorExato: maximo.valorImovelMax, financiado: r.financiado,
     entrada: valor - r.financiado, parcela1: r.parcela1, ultimaParcela: r.ultimaParcela,
     percRenda: r.parcela1 / d.renda, prazoMeses: r.prazoMeses,
@@ -1406,7 +1428,7 @@ function limparFormulario(){
   ['fCliente','fContato','fNasc','fCpf','fImovel','fEntrada','fRenda','fFgts','fNome2','fCpf2','fNasc2','fRenda2'].forEach(i=>{ el(i).value=''; });
   ['fBancoRel','fEstadoCivil','fSituacao','fEstadoCivil2','fSituacao2'].forEach(i=>{ el(i).value=''; });
   el('fModo').value='completa'; el('fDependentes').value=0; el('fPrazo').value=35; infoPrazo(); el('fSistema').value='SAC'; uiModo(); FORM_OF_ABERTO = false; limparFormOficial();
-  el('fCondicao').value='novo'; el('fCotista').value='sim'; el('fPrimeiro').value='sim'; el('fUsarFgts').value='nao';
+  el('fCondicao').value='novo'; el('fEmpreendCaixa').value='nao'; el('fCotista').value='sim'; el('fPrimeiro').value='sim'; el('fUsarFgts').value='nao';
   el('fComposta').value='nao'; el('fPerc1').value=50;
   el('cpfErro').textContent=''; el('cpfErro2').textContent=''; el('idadeInfo').textContent=''; el('idadeInfo2').textContent='';
   el('simErro').innerHTML=''; el('simResultado').style.display='none';
@@ -1641,6 +1663,7 @@ function editarSimulacao(id){
   el('fPrazo').value = +((d.prazoMeses||420)/12).toFixed(2); infoPrazo();
   el('fSistema').value = d.sistema||'SAC';
   el('fCondicao').value = d.condicao||'novo';
+  el('fEmpreendCaixa').value = d.empreendCaixa === 'sim' ? 'sim' : 'nao';
   el('fCotista').value = d.cotista||'sim';
   el('fPrimeiro').value = d.primeiro||'sim';
   el('fNasc').value = d.nasc||'';
@@ -2128,6 +2151,15 @@ function descOficial(o){
   return [o.linha, o.data ? 'simulação de ' + o.data : ''].filter(Boolean).join(', ');
 }
 
+/* Localiza na tabela a linha equivalente à simulada pelo banco: mesma instituição e taxa efetiva;
+   se o banco indicar empreendimento financiado na CAIXA, prefere a linha "Empreendimento". */
+function linhaDaOficial(lista, banco, taxa, linhaTxt){
+  const c = (lista || []).filter(r => r.instituicao === banco && Math.abs((r.taxa_aa||0) - taxa) < 0.01);
+  if (!c.length) return null;
+  const emp = /Empreendimento/i.test(linhaTxt || '');
+  return c.find(r => emp === /Empreendimento/i.test(r.linha || '')) || c[0];
+}
+
 /* Reconciliação: refaz o cálculo com os MESMOS parâmetros do banco e aponta cada divergência
    entre o que foi digitado aqui e o que foi digitado no simulador do banco. */
 function reconciliar(o, d, mel, lista){
@@ -2153,7 +2185,7 @@ function reconciliar(o, d, mel, lista){
   cmp('Valor financiado', det.financiado, mel.financiado, fmtBRL, 'é a base de cálculo dos juros, da amortização e do seguro MIP.');
   cmp('Prazo (meses)', det.prazoMeses, mel.prazoMeses, x => x + ' meses', 'prazo menor aumenta a amortização mensal; o banco limita o prazo pela idade (idade + prazo até 80 anos e 6 meses).');
   if (det.idade != null && d.nasc) cmp('Idade do proponente', det.idade, d.idade, x => x + ' anos', `a data de nascimento no banco (${det.nasc}) difere da informada aqui; a idade define o prazo máximo e a taxa do seguro MIP.`);
-  const mesma = (lista || []).find(r => r.instituicao === o.banco && Math.abs(r.taxa_aa - taxa) < 0.01);
+  const mesma = linhaDaOficial(lista || [], o.banco, taxa, det.linha);
   if (mesma) par.push({ rot:'Taxa efetiva (% a.a.)', banco: fmtPct(taxa), aqui: fmtPct(mesma.taxa_aa) + ' · ' + mesma.instituicao + ' ' + mesma.linha, diverge:false, expl:'' });
   else cmp('Taxa efetiva (% a.a.)', taxa, mel.taxa_aa, fmtPct, `o banco simulou ${det.linha || 'uma linha'} que não está na nossa tabela com essa taxa; a melhor condição aqui é ${mel.instituicao||''} ${mel.linha||''}. Vale atualizar a tabela de taxas.`);
   cmp('Renda informada', det.renda, d.renda, fmtBRL, 'a renda não altera a parcela, só a verificação dos 30%.');
@@ -2350,6 +2382,10 @@ function adotarOficial(idx, silencioso){
     infoPrazo();
   }
   if (det.sistema) troca('fSistema', 'sistema', det.sistema, a => a, x => x, det.sistema);
+  if (/Empreendimento Financiado na CAIXA/i.test(det.linha || '')){
+    troca('fEmpreendCaixa', 'empreendimento financiado na CAIXA', 'sim', a => a === 'sim' ? 'sim' : 'não', () => 'sim', 'sim');
+    if (el('fCondicao').value === 'usado') troca('fCondicao', 'imóvel', 'novo', a => a, x => x, 'novo');
+  }
   if (det.valorImovel){
     if (el('fModo').value === 'imovel'){ el('fModo').value = 'completa'; uiModo(); aj.push({ rot:'objetivo', antes:'quanto de imóvel consigo', depois:'simulação completa' }); }
     troca('fImovel', 'valor do imóvel', det.valorImovel, a => fmtBRL(lerMoeda('fImovel')), fmtBRL, Math.round(det.valorImovel).toLocaleString('pt-BR'));

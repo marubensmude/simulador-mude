@@ -1,6 +1,6 @@
 {
   "descricao": "Curadoria de taxas da Mude Imóveis. O botão 'Atualizar taxas' do painel administrativo lê este arquivo e mostra as diferenças em relação à tabela em uso antes de aplicar. Para atualizar, peça ao assistente da Mude uma nova curadoria; ele reescreve este arquivo no GitHub.",
-  "data_referencia": "23/09/2026",
+  "data_referencia": "05/10/2026",
   "taxas": [
     {
       "instituicao": "Caixa",
@@ -60,6 +60,15 @@
       "prazo_max_meses": 420,
       "correcao": "TR",
       "obs": "Sem relacionamento · mesma taxa do simulador oficial da Caixa (10,92% nominal)"
+    },
+    {
+      "instituicao": "Caixa",
+      "linha": "SBPE Empreendimento CAIXA",
+      "taxa_aa": 11.49,
+      "cota_max": 90,
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "obs": "Imóvel novo vinculado a empreendimento financiado na CAIXA · taxa balcão (10,92% nominal) · cota 90% SAC / 80% Price · Price até 360 meses"
     },
     {
       "instituicao": "Caixa",
