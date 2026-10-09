@@ -266,13 +266,15 @@
       <div id="bRenda"><label id="lblRenda">Renda bruta mensal (R$)</label><input id="fRenda" type="text" inputmode="numeric" placeholder="12.000"></div>
       <div id="bPrazo"><label>Prazo (anos, aceita fração)</label><input id="fPrazo" type="number" value="35" min="1" max="35" step="any" oninput="infoPrazo()"><small id="prazoInfo" style="display:block;color:var(--texto2);margin-top:4px">420 meses</small></div>
     </div>
-    <div class="grid g5" style="margin-bottom:18px">
+    <div class="grid g3" style="margin-bottom:18px">
       <div><label>Sistema de amortização (cálculo)</label><select id="fSistema" onchange="trocarSistemaBase()"><option value="SAC">SAC (parcelas decrescentes)</option><option value="PRICE">Price (parcelas fixas)</option></select></div>
       <div><label>Imóvel</label><select id="fCondicao"><option value="novo">Novo</option><option value="usado">Usado</option></select></div>
       <div><label>Empreendimento financiado na CAIXA?</label><select id="fEmpreendCaixa" title="Imóvel novo vinculado a empreendimento (obra/incorporação) financiado pela CAIXA: libera a linha SBPE Empreendimento CAIXA, com cota de até 90% no SAC"><option value="nao">Não / não sei</option><option value="sim">Sim</option></select></div>
       <div><label>Carteira assinada há mais de 3 anos (cotista)?</label><select id="fCotista"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
-      <div><label>Primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
+      <div><label>Possui imóvel em seu nome no município?</label><select id="fImovelMun" onchange="uiPrimeiro()"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
+      <div id="boxPrimeiroImovel"><label>Será o primeiro imóvel (desconto 50% no registro)?</label><select id="fPrimeiro"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
     </div>
+    <div id="avisoImovelMun" class="aviso erro" style="display:none;margin:-6px 0 18px">Cliente já possui imóvel em seu nome no município: <b>não se enquadra no Minha Casa Minha Vida</b>. Pelo SBPE a operação continua possível, mas a aprovação depende do comprometimento da renda (parcela de até 30% da renda bruta, considerando eventuais financiamentos e dívidas já existentes).</div>
     <div class="grid g4" style="margin-bottom:14px">
       <div><label>Vai usar FGTS na compra?</label><select id="fUsarFgts"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
       <div><label>Valor do FGTS (R$)</label><input id="fFgts" type="text" inputmode="numeric" placeholder="0"></div>
@@ -533,6 +535,14 @@ function uiModo(){
   el('lblEntrada').textContent = m === 'completa' ? 'Entrada (R$)' : 'Entrada disponível (R$, opcional)';
   el('lblRenda').textContent = m === 'imovel' ? 'Renda bruta mensal (R$) · obrigatória' : m === 'renda' ? 'Renda bruta mensal (R$, opcional)' : 'Renda bruta mensal (R$)';
 }
+function uiPrimeiro(){
+  const tem = el('fImovelMun').value === 'sim';
+  if (tem) el('fPrimeiro').value = 'nao'; // já possui imóvel no município: sem desconto de 1º imóvel
+  el('fPrimeiro').disabled = tem;
+  el('boxPrimeiroImovel').style.opacity = tem ? '.45' : '';
+  el('avisoImovelMun').style.display = tem ? 'block' : 'none';
+  el('boxPrimeiroImovel').title = tem ? 'Cliente já possui imóvel no município: não se aplica o desconto de 50% do primeiro imóvel.' : '';
+}
 function uiComposta(){
   const sim = el('fComposta').value === 'sim';
   el('blocoComprador2').style.display = sim ? 'block' : 'none';
@@ -619,6 +629,7 @@ function linhasElegiveis(taxas, d){
   const sfi = d.modo !== 'imovel' && d.valorImovel > PARAM.tetoSFH; // acima do teto: estimamos pelo padrão SBPE (SFI, taxas livres)
   return taxas.filter(t => {
     if (t.mcmv_faixa){
+      if (d.imovelMunicipio === 'sim') return false; // já possui imóvel no município: não se enquadra no MCMV
       if (!d.renda) return false;
       const faixaDaRenda = d.renda <= 3200 ? 'f1' : d.renda <= 5000 ? 'f2' : d.renda <= 9600 ? 'f3' : d.renda <= 13000 ? 'f4' : null;
       if (t.mcmv_faixa !== faixaDaRenda) return false;
@@ -910,7 +921,8 @@ function simular(auto){
     condicao: el('fCondicao').value,
     empreendCaixa: el('fEmpreendCaixa').value,
     cotista: el('fCotista').value,
-    primeiro: el('fPrimeiro').value,
+    imovelMunicipio: el('fImovelMun').value,
+    primeiro: el('fImovelMun').value === 'sim' ? 'nao' : el('fPrimeiro').value,
     nasc: el('fNasc').value,
     idade: idadeDe(el('fNasc').value),
     custosManual: { ...CUSTOS_MANUAL }
@@ -1399,7 +1411,7 @@ async function carregarFichas(){
           ${kv('Situação profissional', d.situacao)}${kv('Renda bruta', d.rendaPrincipal ? fmtBRL(d.rendaPrincipal) : '')}
           ${kv('Carteira +3 anos', sn(d.cotista))}${kv('Usar FGTS', sn(d.usarFgts))}${kv('Valor do FGTS', d.valorFgts ? fmtBRL(d.valorFgts) : '')}
           ${kv('Imóvel em vista', sn(d.temImovel))}${kv('Valor do imóvel', d.valorImovel ? fmtBRL(d.valorImovel) : '')}${kv('Imóvel', d.condicao ? (d.condicao==='novo'?'Novo':'Usado') : '')}
-          ${kv('Entrada própria', d.entradaPropria ? fmtBRL(d.entradaPropria) : '')}${kv('Primeiro imóvel', sn(d.primeiro))}${kv('Banco principal', d.bancoRel)}
+          ${kv('Entrada própria', d.entradaPropria ? fmtBRL(d.entradaPropria) : '')}${kv('Imóvel no município', sn(d.imovelMunicipio))}${kv('Primeiro imóvel', sn(d.primeiro))}${kv('Banco principal', d.bancoRel)}
           ${d.c2 ? kv('2º comprador', d.c2.nome) + kv('CPF (2º)', d.c2.cpf) + kv('Nascimento (2º)', dt(d.c2.nasc)) + kv('Estado civil (2º)', d.c2.estadoCivil) + kv('Situação (2º)', d.c2.situacao) + kv('Renda (2º)', d.c2.renda ? fmtBRL(d.c2.renda) : '') : ''}
         </div>
         ${d.obs ? `<div class="aviso"><b>Observação do cliente:</b> ${escH(d.obs)}</div>` : ''}
@@ -1428,7 +1440,7 @@ function limparFormulario(){
   ['fCliente','fContato','fNasc','fCpf','fImovel','fEntrada','fRenda','fFgts','fNome2','fCpf2','fNasc2','fRenda2'].forEach(i=>{ el(i).value=''; });
   ['fBancoRel','fEstadoCivil','fSituacao','fEstadoCivil2','fSituacao2'].forEach(i=>{ el(i).value=''; });
   el('fModo').value='completa'; el('fDependentes').value=0; el('fPrazo').value=35; infoPrazo(); el('fSistema').value='SAC'; uiModo(); FORM_OF_ABERTO = false; limparFormOficial();
-  el('fCondicao').value='novo'; el('fEmpreendCaixa').value='nao'; el('fCotista').value='sim'; el('fPrimeiro').value='sim'; el('fUsarFgts').value='nao';
+  el('fCondicao').value='novo'; el('fEmpreendCaixa').value='nao'; el('fCotista').value='sim'; el('fImovelMun').value='nao'; el('fPrimeiro').value='sim'; uiPrimeiro(); el('fUsarFgts').value='nao';
   el('fComposta').value='nao'; el('fPerc1').value=50;
   el('cpfErro').textContent=''; el('cpfErro2').textContent=''; el('idadeInfo').textContent=''; el('idadeInfo2').textContent='';
   el('simErro').innerHTML=''; el('simResultado').style.display='none';
@@ -1452,7 +1464,8 @@ async function abrirFicha(id){
   el('fImovel').value = br(d.valorImovel);
   if (d.condicao) el('fCondicao').value = d.condicao;
   el('fEntrada').value = br(d.entradaPropria);
-  el('fPrimeiro').value = d.primeiro==='nao' ? 'nao' : 'sim';
+  el('fImovelMun').value = d.imovelMunicipio==='sim' ? 'sim' : 'nao';
+  el('fPrimeiro').value = d.primeiro==='nao' ? 'nao' : 'sim'; uiPrimeiro();
   el('fBancoRel').value = d.bancoRel||'';
   el('fModo').value = d.temImovel==='sim' && d.valorImovel ? 'completa' : 'imovel';
   uiModo();
@@ -1613,8 +1626,12 @@ function curadoria(d, resultados, custos){
   if (d.sfi)
     add('atencao','Operação SFI', `Acima de ${fmtBRL(PARAM.tetoSFH)} o financiamento sai do SFH: taxas livremente negociadas, sem FGTS e sem o desconto de 50% no registro. Com entrada de ${fmtBRL(d.valorImovel - melhor.financiado)} sobre ${fmtBRL(d.valorImovel)}, o percentual financiado é baixo, o que dá força para negociar taxa próxima (ou melhor) que a do SBPE.`);
 
+  // Já possui imóvel no município
+  if (d.imovelMunicipio === 'sim')
+    add('atencao','Possui imóvel no município', `O cliente já tem imóvel em seu nome no município, por isso não se enquadra no Minha Casa Minha Vida e as linhas do programa foram retiradas do comparativo. Pelo SBPE a compra segue possível, mas a aprovação depende do comprometimento da renda: a parcela precisa caber em até 30% da renda bruta (${fmtBRL(d.renda*PARAM.comprometimento)}), já descontados financiamentos e dívidas em andamento.`);
+
   // Oportunidade MCMV
-  if (!d.sfi && d.renda > 0 && d.renda <= PARAM.mcmv.f4.rendaMax && d.modo !== 'imovel' && !resultados.some(r=>String(r.linha||'').includes('MCMV'))){
+  if (d.imovelMunicipio !== 'sim' && !d.sfi && d.renda > 0 && d.renda <= PARAM.mcmv.f4.rendaMax && d.modo !== 'imovel' && !resultados.some(r=>String(r.linha||'').includes('MCMV'))){
     const fx = d.renda <= 3200 ? PARAM.mcmv.f1 : d.renda <= 5000 ? PARAM.mcmv.f2 : d.renda <= 9600 ? PARAM.mcmv.f3 : PARAM.mcmv.f4;
     if (d.valorImovel > fx.tetoImovel)
       add('dica','Perto do Minha Casa Minha Vida', `Pela renda, o cliente se enquadra no MCMV, mas o imóvel ultrapassa o teto da faixa (${fmtBRL(fx.tetoImovel)}). Havendo flexibilidade para um imóvel até esse valor, os juros caem bastante em relação ao SBPE.`);
@@ -1665,7 +1682,8 @@ function editarSimulacao(id){
   el('fCondicao').value = d.condicao||'novo';
   el('fEmpreendCaixa').value = d.empreendCaixa === 'sim' ? 'sim' : 'nao';
   el('fCotista').value = d.cotista||'sim';
-  el('fPrimeiro').value = d.primeiro||'sim';
+  el('fImovelMun').value = d.imovelMunicipio==='sim' ? 'sim' : 'nao';
+  el('fPrimeiro').value = d.primeiro||'sim'; uiPrimeiro();
   el('fNasc').value = d.nasc||'';
   el('fCpf').value = d.cpf||'';
   el('fEstadoCivil').value = d.estadoCivil||'';
