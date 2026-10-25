@@ -8,8 +8,8 @@
 <meta name="theme-color" content="#000000">
 <meta property="og:title" content="Vamos simular o seu sonho · Mude Imóveis">
 <meta property="og:description" content="Preencha seus dados e a equipe Mude Imóveis prepara a sua simulação de financiamento.">
-<link rel="icon" href="favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
@@ -202,8 +202,13 @@
       </div>
       <div class="campo" data-req>
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 20.5 2.5M17 6l2.5 2.5M14.5 8.5 16.5 10.5"/></svg></div>
-        <div><label><span class="n">13.</span>Será o seu primeiro imóvel?</label>
-          <div class="opcoes" data-grupo="primeiro"><button type="button" data-v="sim">Sim</button><button type="button" data-v="nao">Não</button></div></div>
+        <div><label><span class="n">13.</span>Você tem algum imóvel em seu nome no município onde pretende comprar?</label>
+          <div class="opcoes" data-grupo="imovelMunicipio"><button type="button" data-v="sim">Sim</button><button type="button" data-v="nao">Não</button></div>
+          <div id="boxPrimeiro" style="display:none;margin-top:12px">
+            <label style="font-size:14px;margin-bottom:6px">Este será o seu primeiro imóvel?</label>
+            <div class="opcoes" data-grupo="primeiro"><button type="button" data-v="sim">Sim</button><button type="button" data-v="nao">Não</button></div>
+            <small class="ajuda">Na primeira aquisição residencial financiada, o registro em cartório pode ter desconto de 50%.</small>
+          </div></div>
       </div>
       <div class="campo">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 4l9 5.5M4.5 9.5h15M5.5 10v7.5M9.8 10v7.5M14.2 10v7.5M18.5 10v7.5M3.5 20.5h17"/></svg></div>
@@ -322,6 +327,7 @@ document.querySelectorAll('.opcoes').forEach(g=>{
     const c=g.closest('.campo'); c.classList.remove('invalido'); const er=c.querySelector('.err'); if(er) er.remove();
     if (g.dataset.grupo==='usarFgts') $('boxFgts').style.display = b.dataset.v==='sim' ? 'block':'none';
     if (g.dataset.grupo==='temImovel') $('boxImovel').style.display = b.dataset.v==='sim' ? 'block':'none';
+    if (g.dataset.grupo==='imovelMunicipio') $('boxPrimeiro').style.display = b.dataset.v==='nao' ? 'block':'none';
     if (g.dataset.grupo==='composta'){ $('bloco2').style.display = b.dataset.v==='sim' ? 'block':'none'; }
   });
 });
@@ -371,7 +377,8 @@ function validarEtapa(i){
     req('cotista'); req('usarFgts');
   }
   if (i===2){
-    req('temImovel'); req('primeiro');
+    req('temImovel'); req('imovelMunicipio');
+    if (escolha.imovelMunicipio==='nao' && !escolha.primeiro) ok=marca(sec.querySelector('[data-grupo="primeiro"]'),'Informe se será o seu primeiro imóvel.');
     if (escolha.temImovel==='sim'){
       if (moeda('valor')<20000) ok=marca('valor','Informe o valor do imóvel.');
       if (!escolha.condicao) ok=marca(sec.querySelector('[data-grupo="condicao"]'),'Informe se é novo ou usado.');
@@ -417,7 +424,8 @@ async function enviar(){
     cotista: escolha.cotista, usarFgts: escolha.usarFgts, valorFgts: escolha.usarFgts==='sim' ? moeda('fgts') : 0,
     temImovel: escolha.temImovel, valorImovel: escolha.temImovel==='sim' ? moeda('valor') : 0,
     condicao: escolha.temImovel==='sim' ? escolha.condicao : '', entradaPropria: moeda('entrada'),
-    primeiro: escolha.primeiro, bancoRel: $('banco').value,
+    imovelMunicipio: escolha.imovelMunicipio,
+    primeiro: escolha.imovelMunicipio==='nao' && escolha.primeiro==='sim' ? 'sim' : 'nao', bancoRel: $('banco').value,
     composta: composta ? 'sim' : 'nao',
     c2: composta ? { nome: limpo($('nome2').value), cpf: $('cpf2').value, nasc: dataISO($('nasc2').value),
       estadoCivil: $('civil2').value, situacao: $('situacao2').value, renda: moeda('renda2') } : null,
