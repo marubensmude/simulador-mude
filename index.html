@@ -2502,13 +2502,25 @@ async function salvarNovaSenha(){
 async function atualizarTaxas(){
   const box = el('diffTaxas');
   box.innerHTML = '<div class="aviso">Buscando a última curadoria de taxas…</div>';
-  let nov;
-  try {
-    const r = await fetch('data/taxas_vigentes.json?v=' + Date.now(), { cache:'no-store' });
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    nov = await r.json();
-  } catch(e){
-    box.innerHTML = '<div class="aviso erro">Não foi possível ler o arquivo de taxas vigentes ('+e.message+'). Peça ao assistente da Mude uma nova curadoria de taxas para atualizar o arquivo data/taxas_vigentes.json no GitHub.</div>';
+  let nov, ultimoErro = '';
+  // Tenta primeiro o arquivo publicado junto do sistema; se falhar (página aberta
+  // de cópia local, atalho, cache ou rede instável), busca direto no repositório.
+  const FONTES_TAXAS = [
+    'data/taxas_vigentes.json',
+    'https://raw.githubusercontent.com/marubensmude/simulador-mude/main/data/taxas_vigentes.json',
+    'https://marubensmude.github.io/simulador-mude/data/taxas_vigentes.json'
+  ];
+  for (const url of FONTES_TAXAS){
+    try {
+      const r = await fetch(url + '?v=' + Date.now(), { cache:'no-store' });
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      nov = await r.json();
+      if (!nov || !Array.isArray(nov.taxas)) throw new Error('arquivo sem lista de taxas');
+      break;
+    } catch(e){ ultimoErro = e.message; nov = null; console.warn('taxas_vigentes via', url, '→', e.message); }
+  }
+  if (!nov){
+    box.innerHTML = '<div class="aviso erro">Não foi possível ler o arquivo de taxas vigentes ('+ultimoErro+'). Verifique a conexão com a internet e tente de novo; se persistir, peça ao assistente da Mude para conferir o arquivo data/taxas_vigentes.json no GitHub.</div>';
     return;
   }
   const difs = [];
@@ -2532,23 +2544,29 @@ async function atualizarTaxas(){
 }
 async function aplicarTaxas(){
   const difs = window._difsTaxas || [];
+  const falhas = [];
   for (const x of difs){
     if (!x.t){ // linha nova na curadoria: inclui na tabela
       const nova = { instituicao:x.n.instituicao, linha:x.n.linha, taxa_aa:x.n.taxa_aa, correcao:x.n.correcao||'TR', cota_max:x.n.cota_max||80, prazo_max_meses:x.n.prazo_max_meses||420, obs:x.n.obs||null, atualizado_em:new Date().toISOString() };
       if (DEMO){ TAXAS.push({ id: TAXAS.length + 1, ...nova }); continue; }
       const { data: ins, error } = await sb.from('taxas').insert(nova).select().single();
-      if (!error && ins) TAXAS.push(ins); else console.warn('inserir taxa:', error);
+      if (!error && ins) TAXAS.push(ins); else { console.warn('inserir taxa:', error); falhas.push(x.n.instituicao+' · '+x.n.linha+' ('+(error?.message||'sem retorno')+')'); }
       continue;
     }
     const novo = { taxa_aa: x.n.taxa_aa, atualizado_em: new Date().toISOString() };
     if (x.n.cota_max) novo.cota_max = x.n.cota_max;
     if (x.n.prazo_max_meses) novo.prazo_max_meses = x.n.prazo_max_meses;
     if (x.n.obs) novo.obs = x.n.obs;
-    if (DEMO) Object.assign(x.t, novo);
-    else await sb.from('taxas').update(novo).eq('id', x.t.id);
+    if (!DEMO){
+      const { error } = await sb.from('taxas').update(novo).eq('id', x.t.id);
+      if (error){ console.warn('atualizar taxa:', error); falhas.push(x.n.instituicao+' · '+x.n.linha+' ('+error.message+')'); continue; }
+    }
     Object.assign(x.t, novo);
   }
-  el('diffTaxas').innerHTML = '<div class="aviso">Taxas atualizadas. As próximas simulações já usam os novos valores.</div>';
+  window._difsTaxas = null;
+  el('diffTaxas').innerHTML = falhas.length
+    ? '<div class="aviso erro">Algumas taxas não foram gravadas no banco: '+falhas.join('; ')+'. Saia e entre novamente no sistema e clique em Atualizar taxas de novo.</div>'
+    : '<div class="aviso">Taxas atualizadas. As próximas simulações já usam os novos valores.</div>';
   desenharTaxas();
 }
 
