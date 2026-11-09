@@ -1,6 +1,6 @@
 {
   "descricao": "Curadoria de taxas da Mude Imóveis. O botão 'Atualizar taxas' do painel administrativo lê este arquivo e mostra as diferenças em relação à tabela em uso antes de aplicar. Para atualizar, peça ao assistente da Mude uma nova curadoria; ele reescreve este arquivo no GitHub.",
-  "data_referencia": "05/10/2026",
+  "data_referencia": "09/11/2026",
   "taxas": [
     {
       "instituicao": "Caixa",
@@ -87,23 +87,26 @@
     {
       "instituicao": "Itaú",
       "linha": "SBPE",
-      "taxa_aa": 11.7,
+      "taxa_aa": 12.95,
       "cota_max": 90,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "obs": "Taxa mínima elevada de 11,89% para 12,95% a.a. + TR em 29/10/2026 · sem conta no Itaú pode chegar a 14,85%"
     },
     {
       "instituicao": "Bradesco",
       "linha": "SBPE",
-      "taxa_aa": 11.7,
+      "taxa_aa": 15.0,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "obs": "Linha principal elevada para 15% a.a. + TR em 26/10/2026 · Bradesco Private a partir de 13,60%"
     },
     {
       "instituicao": "Santander",
       "linha": "SBPE",
-      "taxa_aa": 11.69,
+      "taxa_aa": 12.49,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "obs": "Taxa mínima elevada de 11,69% para 12,49% a.a. + TR em 30/10/2026"
     },
     {
       "instituicao": "Inter",
@@ -119,5 +122,10 @@
       "cota_max": 90,
       "prazo_max_meses": 420
     }
+  ],
+  "fontes": [
+    "Reajustes de Itaú, Santander e Bradesco noticiados em 30/10/2026 (TMC, Click Petróleo e Gás)",
+    "MySide, radar de taxas atualizado em 30/10/2026",
+    "Caixa, BB, MCMV, Pró-Cotista, Inter e Sicredi sem mudança confirmada desde 05/10/2026"
   ]
 }
