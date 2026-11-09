@@ -1,30 +1,30 @@
 {
   "descricao": "Valores de referência usados pelo robô de verificação. Quando o robô encontrar um número diferente nos sites monitorados, ele abre um alerta (Issue) no GitHub. Após confirmar a mudança e atualizar o painel administrativo, atualize também este arquivo para silenciar o alerta.",
-  "atualizado_em": "2026-08-03",
+  "atualizado_em": "2026-11-09",
   "fontes": [
     {
       "banco": "Itaú",
       "url": "https://www.itau.com.br/emprestimos-financiamentos/credito-imobiliario/",
-      "referencia": "11,70",
-      "dica": "Procurar percentual anunciado como 'a partir de X% a.a.'"
+      "referencia": "14,85",
+      "dica": "Destaque Taxa a partir de: 14,85% a.a. + TR. FAQ da mesma página informa 13,85%; divergência pendente de cotação."
     },
     {
       "banco": "Inter",
-      "url": "https://inter.co/pra-voce/financiamento-imobiliario/residencial/taxa-bonificada/",
-      "referencia": "9,4",
-      "dica": "Taxa bonificada anunciada na página"
+      "url": "https://ajuda.inter.co/imobiliario/quais-as-taxas-do-credito-imobiliario-inter",
+      "referencia": "10,49",
+      "dica": "Financiamento residencial a partir de 10,49% a.a. + IPCA, confirmado no navegador. Monitora IPCA, não a linha Inter/TR da tabela. A antiga página bonificada divulga desconto de 0,3 p.p., não taxa de 9,4%."
     },
     {
       "banco": "Radar geral (MySide)",
       "url": "https://myside.com.br/guia-imoveis/taxa-juros-financiamento-imobiliario",
       "referencia": "10,26",
-      "dica": "Menor taxa Caixa divulgada no radar"
+      "dica": "Caixa 10,26% a.a. + TR no radar MySide, atualização indicada 30/10/2026; fonte secundária e condição com relacionamento, não oferta oficial confirmada."
     },
     {
       "banco": "Radar geral (Larya)",
       "url": "https://larya.com.br/blog/taxas-de-juros-financiamento-imobiliario-2026/",
-      "referencia": "11,19",
-      "dica": "Taxa Caixa com relacionamento divulgada no ranking"
+      "referencia": "10,92",
+      "dica": "Valor Caixa no ranking e FAQ; a própria página o chama de nominal em outro trecho. Fonte secundária, não substituir taxa efetiva do simulador. Os 11,19% aparecem apenas em exemplo."
     }
   ]
 }

@@ -1,48 +1,64 @@
 {
-  "descricao": "Curadoria de taxas da Mude Imóveis. O botão 'Atualizar taxas' do painel administrativo lê este arquivo e mostra as diferenças em relação à tabela em uso antes de aplicar. Para atualizar, peça ao assistente da Mude uma nova curadoria; ele reescreve este arquivo no GitHub.",
+  "descricao": "Curadoria de taxas da Mude Imóveis. O botão 'Atualizar taxas' do painel administrativo lê este arquivo e mostra as diferenças em relação à tabela em uso antes de aplicar. Para atualizar, peça ao assistente da Mude uma nova curadoria; ele reescreve este arquivo no GitHub. Revisão de 09/11/2026: taxa_aa consumida como anual efetiva. Notas técnicas de cada linha ficam em nota_curadoria (não aparecem no sistema). Valores sem confirmação comercial foram preservados e identificados em obs; data_referencia é data da revisão, não confirmação integral. Não foram usadas médias de setembro.",
   "data_referencia": "09/11/2026",
   "taxas": [
     {
       "instituicao": "Caixa",
       "linha": "MCMV Faixa 1",
-      "taxa_aa": 4.5,
+      "taxa_aa": 4.59,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "Taxa efetiva equivalente a 4.5% a.a. nominal com capitalização mensal; taxa_aa é efetiva no motor atual. Cenário de 4,50% nominal preservado, não piso universal; tabela oficial varia de 4,00% a 5,25% por renda, região e cotista.",
+      "obs": "Renda até R$ 3.200 · imóvel até R$ 275 mil · 4,50% nominal (efetiva 4,59%) · varia de 4,25% a 5,25% no Centro-Oeste conforme renda e cotista"
     },
     {
       "instituicao": "Caixa",
       "linha": "MCMV Faixa 2",
-      "taxa_aa": 5.5,
+      "taxa_aa": 5.64,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "Taxa efetiva equivalente a 5.5% a.a. nominal com capitalização mensal; taxa_aa é efetiva no motor atual. Cenário de 5,50% nominal preservado, não piso universal; tabela oficial varia de 4,75% a 7,00% por renda, região e cotista.",
+      "obs": "Renda até R$ 5.000 · imóvel até R$ 275 mil · 5,50% nominal (efetiva 5,64%) · varia de 5,00% a 7,00% conforme renda e cotista"
     },
     {
       "instituicao": "Caixa",
       "linha": "MCMV Faixa 3",
-      "taxa_aa": 8.16,
+      "taxa_aa": 8.47,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "Taxa efetiva equivalente a 8.16% a.a. nominal com capitalização mensal; taxa_aa é efetiva no motor atual. Cenário não cotista (8,16% nominal); cotista: 7,66% nominal. Não usar a mesma taxa para todos os perfis.",
+      "obs": "Renda até R$ 9.600 · imóvel até R$ 400 mil · não cotista 8,16% nominal (efetiva 8,47%) · cotista 7,66% nominal"
     },
     {
       "instituicao": "Caixa",
       "linha": "MCMV Faixa 4",
-      "taxa_aa": 10.5,
+      "taxa_aa": 10.47,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "Taxa efetiva equivalente a 10% a.a. nominal com capitalização mensal; taxa_aa é efetiva no motor atual. Classe Média: 10% nominal na CAIXA. Enquadramento e cotas dependem do imóvel, região e sistema; 80% preservados do arquivo de origem.",
+      "obs": "Classe Média · renda até R$ 13.000 · imóvel até R$ 600 mil · 10% nominal (efetiva 10,47%) · usados: 80% de cota no Centro-Oeste"
     },
     {
       "instituicao": "Caixa",
       "linha": "Pró-Cotista FGTS",
       "taxa_aa": 9.01,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "9,01% efetivos preservados; tabela do Ministério das Cidades indica 8,66% nominais (aproximadamente 9,01% efetivos). Confirmar disponibilidade de recursos e condição específica CAIXA."
     },
     {
       "instituicao": "BB",
       "linha": "Pró-Cotista FGTS",
       "taxa_aa": 9.0,
       "cota_max": 80,
-      "prazo_max_meses": 360
+      "prazo_max_meses": 360,
+      "correcao": "TR",
+      "nota_curadoria": "9% a.a. efetivos confirmados na página oficial para Pró-Cotista. Prazo de 360 meses e cota 80% preservados, sem confirmação específica da linha; sujeito a FGTS e recursos."
     },
     {
       "instituicao": "Caixa",
@@ -50,7 +66,8 @@
       "taxa_aa": 11.19,
       "cota_max": 80,
       "prazo_max_meses": 420,
-      "obs": "Com relacionamento (débito em conta + conta-salário)"
+      "correcao": "TR",
+      "nota_curadoria": "PENDENTE: 11,19% e condição de relacionamento preservados da base original. Comunicado oficial divulga piso geral efetivo de 10,99% + TR, sem validar este pacote específico. Não substituir taxa específica por piso genérico."
     },
     {
       "instituicao": "Caixa",
@@ -59,7 +76,7 @@
       "cota_max": 80,
       "prazo_max_meses": 420,
       "correcao": "TR",
-      "obs": "Sem relacionamento · mesma taxa do simulador oficial da Caixa (10,92% nominal)"
+      "nota_curadoria": "PENDENTE DE REVALIDAÇÃO: Sem relacionamento · mesma taxa do simulador oficial da Caixa (10,92% nominal). Taxa, cota e prazo preservados da base original; não foi gerada nova simulação oficial para este perfil."
     },
     {
       "instituicao": "Caixa",
@@ -68,29 +85,35 @@
       "cota_max": 90,
       "prazo_max_meses": 420,
       "correcao": "TR",
-      "obs": "Imóvel novo vinculado a empreendimento financiado na CAIXA · taxa balcão (10,92% nominal) · cota 90% SAC / 80% Price · Price até 360 meses"
+      "nota_curadoria": "PENDENTE DE REVALIDAÇÃO: Imóvel novo vinculado a empreendimento financiado na CAIXA · taxa balcão (10,92% nominal) · cota 90% SAC / 80% Price · Price até 360 meses. Taxa, cota e prazo preservados da base original; não foi gerada nova simulação oficial para este perfil."
     },
     {
       "instituicao": "Caixa",
       "linha": "SBPE Poupança",
       "taxa_aa": 10.76,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "Poupança",
+      "nota_curadoria": "PENDENTE: 10,76% preservados da base original; composição e spread da linha poupança não confirmados. Taxa variável exige revalidação, não assumir que equivale à linha TR."
     },
     {
       "instituicao": "BB",
       "linha": "SBPE",
       "taxa_aa": 11.6,
       "cota_max": 80,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "11,60% a.a. efetivos confirmados na página oficial para SFH; esta linha SBPE representa SFH. Carteira Hipotecária/SBPE fora desse enquadramento parte de 13,99%; não misturar as duas condições. Cota até 80% e prazo até 420 meses divulgados em condições gerais."
     },
     {
       "instituicao": "Itaú",
       "linha": "SBPE",
-      "taxa_aa": 12.95,
+      "taxa_aa": 14.85,
       "cota_max": 90,
       "prazo_max_meses": 420,
-      "obs": "Taxa mínima elevada de 11,89% para 12,95% a.a. + TR em 29/10/2026 · sem conta no Itaú pode chegar a 14,85%"
+      "correcao": "TR",
+      "nota_curadoria": "Destaque atual do site oficial: a partir de 14,85% a.a. + TR; FAQ informa 13,85%. Não foi confirmada a condição de 12,95% do arquivo anterior nem que 14,85% se restrinja a não correntistas. Convenção e cota de 90% exigem cotação; cota preservada.",
+      "obs": "Site oficial: a partir de 14,85% a.a. + TR (FAQ cita 13,85%) · reajuste de out/2026 · confirmar em cotação"
     },
     {
       "instituicao": "Bradesco",
@@ -98,7 +121,9 @@
       "taxa_aa": 15.0,
       "cota_max": 80,
       "prazo_max_meses": 420,
-      "obs": "Linha principal elevada para 15% a.a. + TR em 26/10/2026 · Bradesco Private a partir de 13,60%"
+      "correcao": "TR",
+      "nota_curadoria": "15% a.a. + TR mantidos da base original e corroborados pelo radar MySide. Taxa comercial não confirmada em resultado personalizado do simulador oficial; exemplos e placeholders descartados. Cota e prazo preservados.",
+      "obs": "Linha principal 15% a.a. + TR desde 26/10/2026 · Private a partir de 13,60% · comprometimento 30% SAC / 15% Price"
     },
     {
       "instituicao": "Santander",
@@ -106,26 +131,40 @@
       "taxa_aa": 12.49,
       "cota_max": 80,
       "prazo_max_meses": 420,
-      "obs": "Taxa mínima elevada de 11,69% para 12,49% a.a. + TR em 30/10/2026"
+      "correcao": "TR",
+      "nota_curadoria": "DIVERGÊNCIA: 12,49% preservados da curadoria original de reajuste de 30/10/2026, também presentes no radar MySide. Site oficial ainda mostra 11,69% + TR e exemplo de 27/01/2026. Confirmar cotação; não reduzir automaticamente para FAQ possivelmente defasado. Cota 80% preservada; site divulga até 90% conforme análise.",
+      "obs": "Reajuste noticiado para 12,49% a.a. + TR em 30/10/2026 · site ainda exibe 11,69% · confirmar em cotação"
     },
     {
       "instituicao": "Inter",
       "linha": "SBPE",
       "taxa_aa": 13.76,
       "cota_max": 75,
-      "prazo_max_meses": 360
+      "prazo_max_meses": 360,
+      "correcao": "TR",
+      "nota_curadoria": "PENDENTE: taxa TR de 13,76%, cota 75% e prazo 360 meses preservados da base original, sem confirmação comercial atual. Site oficial anuncia outra modalidade: 10,49% a.a. + IPCA em até 420 meses. Não substituir nesta linha: o motor atual aplica TR a qualquer correção não fixa."
     },
     {
       "instituicao": "Sicredi",
       "linha": "SBPE",
       "taxa_aa": 10.33,
       "cota_max": 90,
-      "prazo_max_meses": 420
+      "prazo_max_meses": 420,
+      "correcao": "TR",
+      "nota_curadoria": "PENDENTE: 10,33% preservados da base original; não é taxa comercial vigente confirmada. Página oficial exige consulta à cooperativa. Cota até 90% e prazo até 420 meses divulgados; taxa depende de associação e perfil."
     }
   ],
   "fontes": [
-    "Reajustes de Itaú, Santander e Bradesco noticiados em 30/10/2026 (TMC, Click Petróleo e Gás)",
-    "MySide, radar de taxas atualizado em 30/10/2026",
-    "Caixa, BB, MCMV, Pró-Cotista, Inter e Sicredi sem mudança confirmada desde 05/10/2026"
+    "Consulta/revisão: 09/11/2026. Condições não verificadas estão identificadas em obs. Cotas e prazos preservados quando não confirmados; nenhuma linha removida ou renomeada.",
+    "Itaú, destaque 14,85% + TR e FAQ divergente 13,85%: https://www.itau.com.br/emprestimos-financiamentos/credito-imobiliario/",
+    "Inter, página oficial lida no navegador: 10,49% + IPCA (não substitui linha TR): https://ajuda.inter.co/imobiliario/quais-as-taxas-do-credito-imobiliario-inter",
+    "BB, SFH 11,60% efetivos e Pró-Cotista 9% efetivos: https://www.bb.com.br/site/pra-voce/financiamentos/financiamento-imobiliario/",
+    "MCMV/Pró-Cotista, taxas NOMINAIS, tabela atualizada 28/10/2026; conversão para efetivas neste arquivo: https://www.gov.br/cidades/pt-br/acesso-a-informacao/acoes-e-programas/habitacao/programa-minha-casa-minha-vida/mcmv-fgts",
+    "CAIXA Classe Média, 10% nominal: https://www.caixa.gov.br/voce/habitacao/minha-casa-minha-vida/classe-media/Paginas/default.aspx",
+    "CAIXA SBPE, piso geral 10,99% efetivos não confirma pacotes específicos: https://caixanoticias.caixa.gov.br/Paginas/Not%C3%ADcias/2025/12-DEZEMBRO/CAIXA-volta-a-permitir-mais-de-um-financiamento--imobiliario-pelo-SBPE.aspx",
+    "Santander, FAQ 11,69% diverge do reajuste da curadoria original: https://www.santander.com.br/emprestimos/credito/imobiliario",
+    "Sicredi, sem taxa comercial pública: https://www.sicredi.com.br/site/credito/para-voce/credito-imobiliario/",
+    "Fonte secundária MySide: Bradesco 15%, Santander 12,49%; não constitui confirmação individual: https://myside.com.br/guia-imoveis/taxa-juros-financiamento-imobiliario",
+    "COMPATIBILIDADE: o motor atual usa iMensal=(1+taxa_aa/100)^(1/12)-1 e trata toda correção diferente de fixa como TR. Não adicionar IPCA sem ajuste no cálculo. O importador pode ignorar mudanças apenas em obs/correcao; conferir painel após importar."
   ]
 }
